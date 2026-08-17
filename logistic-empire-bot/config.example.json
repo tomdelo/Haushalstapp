@@ -1,0 +1,12 @@
+{
+  "base_url": "https://TODO.example.com",
+  "auth_token": "HIER_DEIN_TOKEN_AUS_DEM_NETWORK_TAB",
+  "auth_header_name": "Authorization",
+  "auth_header_prefix": "Bearer ",
+
+  "dry_run": true,
+
+  "min_delay_seconds": 4,
+  "max_delay_seconds": 12,
+  "loop_pause_seconds": 60
+}

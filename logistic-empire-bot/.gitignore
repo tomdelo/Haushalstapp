@@ -1,0 +1,8 @@
+# Deine echten Zugangsdaten NIEMALS committen!
+config.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.log
