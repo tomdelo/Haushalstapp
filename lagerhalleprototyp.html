@@ -1,0 +1,2952 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leitstand — Lagerhalle Prototyp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --shell:#171B1F;
+  --panel:#212830;
+  --panel2:#1B2127;
+  --line:#323C46;
+  --ink:#E4E8EC;
+  --muted:#8B959F;
+  --sig-yellow:#E8B923;
+  --rack-blue:#2E6F9E;
+  --rack-orange:#D9722B;
+  --alarm:#C4453B;
+  --ok:#5FA35A;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--shell);color:var(--ink);
+  font-family:'Barlow',system-ui,sans-serif;
+  overflow:hidden;
+}
+.app{display:flex;height:100vh;width:100vw}
+.hall{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* ---- Topbar ---- */
+.topbar{
+  display:flex;align-items:center;gap:18px;
+  padding:10px 16px;background:var(--panel2);
+  border-bottom:1px solid var(--line);
+  flex-wrap:wrap;
+}
+.brand{font-family:'Barlow Condensed';font-weight:700;font-size:18px;letter-spacing:.14em;text-transform:uppercase}
+.brand span{color:var(--sig-yellow)}
+.clock{font-family:'IBM Plex Mono';font-size:15px;font-weight:600;letter-spacing:.04em}
+.shiftbadge{
+  font-family:'Barlow Condensed';font-weight:600;font-size:12px;
+  letter-spacing:.12em;text-transform:uppercase;
+  padding:3px 9px;border:1px solid var(--line);border-radius:2px;
+}
+.spacer{flex:1}
+.speeds{display:flex;gap:2px}
+.speeds button{
+  font-family:'IBM Plex Mono';font-size:12px;font-weight:600;
+  background:var(--panel);color:var(--muted);
+  border:1px solid var(--line);padding:5px 10px;cursor:pointer;
+}
+.speeds button.on{background:var(--sig-yellow);color:#171B1F;border-color:var(--sig-yellow)}
+.speeds button:focus-visible{outline:2px solid var(--sig-yellow);outline-offset:2px}
+
+/* ---- Canvas ---- */
+.canvaswrap{flex:1;position:relative;background:#101317;min-height:0}
+canvas{display:block;width:100%;height:100%}
+
+/* ---- Legend ---- */
+.legend{
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  padding:8px 16px;background:var(--panel2);border-top:1px solid var(--line);
+  font-family:'Barlow Condensed';font-size:12px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);
+}
+.legend .key{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.legend b{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+.toggles{margin-left:auto;display:flex;gap:6px}
+.toggles button{
+  font-family:'Barlow Condensed';font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--panel);color:var(--muted);border:1px solid var(--line);
+  padding:4px 10px;cursor:pointer;
+}
+.toggles button.on{color:#171B1F;background:var(--sig-yellow);border-color:var(--sig-yellow)}
+
+/* ---- Rail ---- */
+.rail{
+  width:330px;flex-shrink:0;background:var(--panel);
+  border-left:1px solid var(--line);
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.sec{border-bottom:1px solid var(--line);padding:12px 14px}
+.sech{
+  font-family:'Barlow Condensed';font-weight:700;font-size:11px;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:9px;display:flex;justify-content:space-between;align-items:baseline;
+}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+.kpi{background:var(--panel);padding:8px 9px}
+.kpi .v{font-family:'IBM Plex Mono';font-size:19px;font-weight:600;line-height:1.1}
+.kpi .l{font-family:'Barlow Condensed';font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin-top:2px}
+.kpi .v.warn{color:var(--sig-yellow)}
+.kpi .v.bad{color:var(--alarm)}
+.kpi .v.good{color:var(--ok)}
+
+.qrow{display:flex;justify-content:space-between;align-items:center;
+  font-family:'IBM Plex Mono';font-size:12px;padding:3px 0}
+.qrow .n{color:var(--muted)}
+.bar{height:3px;background:var(--line);margin-top:3px;position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--rack-orange)}
+
+.log{font-family:'IBM Plex Mono';font-size:11px;line-height:1.6;
+  max-height:170px;overflow-y:auto}
+.log div{color:var(--muted);border-left:2px solid var(--line);padding-left:7px;margin-bottom:3px}
+.log div.hot{color:var(--ink);border-left-color:var(--sig-yellow)}
+.log div.bad{color:#E39C97;border-left-color:var(--alarm)}
+.log time{color:#5C6670;margin-right:6px}
+
+.inspect{font-family:'IBM Plex Mono';font-size:12px;line-height:1.7}
+.inspect .k{color:var(--muted);display:inline-block;width:112px}
+.inspect .empty{font-family:'Barlow';color:var(--muted);font-size:13px;line-height:1.5}
+
+.actions{display:flex;flex-direction:column;gap:6px}
+.actions button{
+  font-family:'Barlow Condensed';font-weight:600;font-size:13px;
+  letter-spacing:.1em;text-transform:uppercase;
+  background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  padding:8px;cursor:pointer;text-align:left;
+}
+.actions button:hover{border-color:var(--sig-yellow)}
+.actions button:disabled{color:#565F68;cursor:not-allowed;border-color:var(--line)}
+.anf{border:1px solid var(--line);border-left:3px solid var(--line);
+  background:var(--panel2);padding:8px 9px;margin-bottom:7px}
+.anf.eil{border-left-color:var(--alarm)}
+.anf.ok{border-left-color:var(--ok)}
+.anf .k{font-family:'Barlow Condensed';font-weight:600;font-size:13px;
+  letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between}
+.anf .p{font-family:'IBM Plex Mono';font-size:11px;color:var(--ink);margin:3px 0}
+.anf .m{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--muted)}
+.anf .b{display:flex;gap:5px;margin-top:7px}
+.anf .b button{flex:1;font-family:'Barlow Condensed';font-weight:600;font-size:12px;
+  letter-spacing:.08em;text-transform:uppercase;padding:7px 4px;cursor:pointer;
+  background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+.anf .b button.ja{border-color:var(--ok);color:#B7DDB4}
+.anf .b button.nein{color:var(--muted)}
+.anf .b button.frei{border-color:var(--sig-yellow);color:var(--sig-yellow)}
+.fehl{color:var(--alarm)}
+#planlast{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono';font-size:11px;margin:8px 0 10px}
+#planlast td{padding:2px 0;color:var(--muted)}
+#planlast td.n{text-align:right;color:var(--ink)}
+#planlast td.warn{color:var(--sig-yellow)}
+#planlast td.bad{color:var(--alarm)}
+.prow{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.prow .nm{flex:1;font-family:'IBM Plex Mono';font-size:11.5px;white-space:nowrap;overflow:hidden}
+.prow .st{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.prow select{
+  background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  font-family:'Barlow Condensed';font-size:12px;letter-spacing:.06em;
+  padding:7px 6px;width:140px;cursor:pointer;border-radius:2px;
+}
+.actions .cost{float:right;font-family:'IBM Plex Mono';font-size:11px;color:var(--muted)}
+.seg{display:flex;gap:2px;margin-bottom:2px}
+.seg button{flex:1;text-align:center;padding:5px 0;font-size:11px}
+.seg button.on{background:var(--sig-yellow);color:#171B1F;border-color:var(--sig-yellow)}
+
+
+/* ── Aufklappbare Abschnitte ── */
+.sec .body{overflow:hidden}
+.sec.zu .body{display:none}
+.rail .sech{cursor:pointer;user-select:none}
+.rail .sech::after{content:'▾';margin-left:8px;color:var(--line);font-size:12px;transition:transform .15s}
+.sec.zu .sech::after{transform:rotate(-90deg);display:inline-block}
+.railbtn,.legonly{display:none}
+
+@media (max-width:900px){
+  .app{flex-direction:column;position:relative}
+  .hall{height:100dvh;flex:none}
+  .canvaswrap{flex:1;min-height:0}
+  .rail{
+    position:fixed;left:0;right:0;bottom:0;width:100%;height:auto;
+    max-height:66dvh;border-left:none;border-top:1px solid var(--line);
+    transform:translateY(101%);transition:transform .22s ease;
+    z-index:40;box-shadow:0 -12px 30px rgba(0,0,0,.55);
+  }
+  .rail.open{transform:none}
+  .railbtn{
+    display:block;font-family:'Barlow Condensed';font-weight:600;font-size:12px;
+    letter-spacing:.12em;text-transform:uppercase;
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    padding:6px 12px;cursor:pointer;
+  }
+  .railbtn.on{background:var(--sig-yellow);color:#171B1F;border-color:var(--sig-yellow)}
+  .legonly{display:block}
+  .legend{
+    padding:6px 10px;gap:10px;font-size:11px;
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  }
+  .legend .key{display:none;gap:10px}
+  .legend.keyon .key{display:flex;gap:10px;flex-wrap:nowrap}
+  .legend .toggles{margin-left:auto;flex-shrink:0}
+  .topbar{padding:7px 10px;gap:10px;flex-wrap:nowrap;overflow-x:auto}
+  .brand{font-size:15px;letter-spacing:.08em}
+  .clock{font-size:13px;white-space:nowrap}
+  .shiftbadge{font-size:10px;padding:2px 6px;white-space:nowrap}
+  .speeds button{padding:5px 8px;font-size:11px}
+  .prow select{width:120px}
+}
+@media (max-width:560px){ .brand{display:none} }
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hall">
+    <div class="topbar">
+      <div class="brand">Leit<span>stand</span></div>
+      <div class="clock" id="clock">Tag 1 · 06:00</div>
+      <div class="shiftbadge" id="shift">Frühschicht</div>
+      <div class="spacer"></div>
+      <button class="railbtn" id="railbtn">Leitstand</button>
+      <div class="speeds" id="speeds">
+        <button data-s="0">❙❙</button>
+        <button data-s="1">1×</button>
+        <button data-s="2">2×</button>
+        <button data-s="4" class="on">4×</button>
+        <button data-s="16">16×</button>
+        <button data-s="60">60×</button>
+      </div>
+    </div>
+    <div class="canvaswrap"><canvas id="cv"></canvas></div>
+    <div class="legend">
+      <span><b style="background:#2E6F9E"></b>Regal</span>
+      <span><b style="background:#A6814D"></b>Palette</span>
+      <span><b style="background:#7A5A2E"></b>Fachboden</span>
+      <span><b style="background:#E8E23A"></b>Mitarbeiter</span>
+      <span style="color:var(--muted)">Helm = Bereich:</span>
+      <span><b style="background:#D9722B"></b>WE</span>
+      <span><b style="background:#3F86BC"></b>Einlagerung</span>
+      <span><b style="background:#E8B923"></b>Kommi</span>
+      <span><b style="background:#5FA35A"></b>WA</span>
+      <span><b style="background:#DDE3E9"></b>Springer</span>
+      <span><b style="background:#C4453B"></b>Gesperrt</span>
+      <span><b style="background:#E8B923"></b>Fahrweg (nur FFZ)</span>
+      <span style="color:var(--muted)">Geräte:</span>
+      <span><b style="background:#D9722B"></b>Stapler</span>
+      <span><b style="background:#4F8FB5"></b>Ameise</span>
+      <span><b style="background:#C7A24B"></b>Kommissionierer</span>
+      <span><b style="background:#98A2AC"></b>Handhubwagen</span>
+      <span><b style="background:#5FA35A"></b>Versandbereit</span>
+      <span><b style="background:#C08B52"></b>Paket</span>
+      <div class="toggles">
+        <button id="legbtn" class="legonly">Legende</button>
+        <button id="zoombtn">Gesamt</button>
+        <button id="tTasks">Wege</button>
+        <button id="tBuch" class="on">Buchungsabgleich</button>
+        <button id="tBins">Bin-IDs</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="rail">
+    <div class="sec">
+      <div class="sech"><span>Kennzahlen</span><span id="kasse" style="font-family:'IBM Plex Mono';color:var(--ink)">—</span></div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Lageraufgaben</span><span id="qtot" style="font-family:'IBM Plex Mono'">0</span></div>
+      <div id="queue"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Kundenaufträge</span><span id="anfcount" style="font-family:'IBM Plex Mono'">0</span></div>
+      <div class="seg" style="margin-bottom:8px">
+        <button id="autoAn">Auto-Annahme</button>
+        <button id="autoFr">Auto-Versand</button>
+      </div>
+      <div id="anfragen"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Versand &amp; Lager</span><span id="aufcount" style="font-family:'IBM Plex Mono'">0</span></div>
+      <div id="auftraege"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Hof &amp; Tore</span><span id="hofcount" style="font-family:'IBM Plex Mono'">0</span></div>
+      <div id="hof" style="font-family:'IBM Plex Mono';font-size:11.5px;line-height:1.75"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech">Auswahl</div>
+      <div class="inspect" id="inspect"><div class="empty">Auf Mitarbeiter, Palette oder Lagerplatz tippen.</div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Fuhrpark intern</span><span id="ffzfree" style="font-family:'IBM Plex Mono'">0</span></div>
+      <div id="ffzlist" style="font-family:'IBM Plex Mono';font-size:11.5px;line-height:1.8;margin-bottom:8px"></div>
+      <div class="actions"><div class="seg" id="ffzbuy"></div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sech"><span>Einsatzplanung</span><span id="planwarn" style="font-family:'IBM Plex Mono';color:var(--sig-yellow)"></span></div>
+      <div class="actions">
+        <div class="seg" id="shiftpick">
+          <button data-sh="0" class="on">Früh</button>
+          <button data-sh="1">Spät</button>
+          <button data-sh="2">Nacht</button>
+        </div>
+      </div>
+      <table id="planlast"></table>
+      <div id="plan"></div>
+      <div class="actions" style="margin-top:8px">
+        <button id="hire">Mitarbeiter einstellen <span class="cost" id="hirecost">2.400 €</span></button>
+      </div>
+    </div>
+
+    <div class="sec" style="flex:1">
+      <div class="sech">Ereignisse</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   1 · RAUM — Grid, Zonen, Bins
+   ══════════════════════════════════════════════════════════ */
+const GW=44, GH=24;
+const WALL=0, FLOOR=1, RACK=2, DOOR_IN=3, DOOR_OUT=4;
+
+const grid=[];
+for(let y=0;y<GH;y++){
+  grid[y]=[];
+  for(let x=0;x<GW;x++){
+    const border = (x===0||y===0||x===GW-1||y===GH-1);
+    grid[y][x]={t:border?WALL:FLOOR, zone:null, bins:null, slot:null};
+  }
+}
+
+function fill(x0,y0,x1,y1,type,zone){
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    if(x<0||y<0||x>=GW||y>=GH)continue;
+    grid[y][x].t=type; grid[y][x].zone=zone;
+  }
+}
+
+// Zonen
+fill(2,3,6,15,FLOOR,'WE');          // Wareneingangspuffer
+fill(2,17,5,20,FLOOR,'SPERR');      // Sperrbereich
+fill(8,20,11,22,FLOOR,'PAUSE');     // Pausenraum
+fill(14,20,25,22,FLOOR,'LADE');     // Ladestation Flurförderzeuge
+fill(29,4,33,12,FLOOR,'PACK');      // Packerei
+fill(35,3,40,16,FLOOR,'WA');        // Warenausgangspuffer
+fill(36,20,41,22,FLOOR,'BUERO');    // Büro
+
+// Regalzeilen: Paare rücken an rücken, jede Seite von eigener Gasse bedient
+const RACK_COLS=[[9,10],[13,14],[17,18],[21,22],[25,26]];
+for(const [a,b] of RACK_COLS){ fill(a,3,b,16,RACK,'LAGER'); }
+
+// Kleinteilelager: zwei Fachbodenzeilen mit Gasse dazwischen
+fill(26,20,32,20,RACK,'FACH');
+fill(26,22,32,22,RACK,'FACH');
+// Umpackplatz: hier werden Paletten vereinzelt
+fill(33,20,35,22,FLOOR,'UMPACK');
+// KEP-Bereitstellung: fertige Rollwagen warten auf den Paketdienst
+fill(35,17,40,17,FLOOR,'KEP');
+
+/* ── Fahrweg: markierte Trasse WE-Tor → Halle → WA-Tor.
+      Nur Flurförderzeuge, Fußgänger ausschließlich über die Überwege. ── */
+function lane(x0,y0,x1,y1){
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const c=grid[y]&&grid[y][x];
+    if(c&&c.t===FLOOR&&!c.zone) c.fahrweg=true;
+  }
+}
+lane(6,18,42,18);        // Längstrasse quer durch die Halle
+lane(7,3,7,18);          // Spur vor dem Wareneingang
+lane(28,2,28,18);        // Spur vor der Packerei
+lane(34,2,34,18);        // Spur vor dem Warenausgang
+lane(1,6,1,6); lane(1,13,1,13);          // Toranbindung WE
+lane(42,7,42,7); lane(42,12,42,12);      // Toranbindung WA
+
+// Schmalgänge: hier wird zu Fuß gearbeitet, kein Flurförderzeug
+function nurFussZone(x0,y0,x1,y1){
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const c=grid[y]&&grid[y][x];
+    if(c&&c.t===FLOOR) c.nurFuss=true;
+  }
+}
+nurFussZone(26,21,32,21);      // Kommissioniergasse Kleinteilelager
+[5,7,9,11].forEach(y=>nurFussZone(31,y,32,y));   // Packtisch und Rollwagenfeld
+
+// Fußgängerüberwege
+const CROSSINGS=[[7,5],[7,11],[7,16],[28,4],[28,10],[28,16],[34,5],[34,11],[34,16],
+                 [9,18],[16,18],[22,18],[30,18],[38,18]];
+for(const [x,y] of CROSSINGS) if(grid[y][x].fahrweg) grid[y][x].cross=true;
+
+// Pausenraum als geschlossener Raum mit einer Tür
+for(let x=7;x<=12;x++) grid[19][x].t=WALL;
+for(let y=20;y<=22;y++){ grid[y][7].t=WALL; grid[y][12].t=WALL; }
+grid[19][9].t=FLOOR; grid[19][9].zone='PAUSE';   // Tür
+
+// Tore
+grid[6][0].t=DOOR_IN;  grid[13][0].t=DOOR_IN;
+grid[7][GW-1].t=DOOR_OUT; grid[12][GW-1].t=DOOR_OUT;
+grid[17][GW-1].t=DOOR_OUT;   // KEP-Tor
+const DOORS_IN=[{x:0,y:6},{x:0,y:13}];
+const DOORS_OUT=[{x:GW-1,y:7},{x:GW-1,y:12}];
+const KEP_DOOR={x:GW-1,y:17};
+
+const walkable=(x,y)=>{
+  const r=grid[y]; if(!r)return false;
+  const c=r[x];    if(!c)return false;
+  return c.t!==WALL && c.t!==RACK;
+};
+// Zu Fuß ist der Fahrweg tabu — außer auf einem Überweg
+const passable=(x,y,mounted)=>{
+  if(!walkable(x,y))return false;
+  const c=grid[y][x];
+  if(mounted && c.nurFuss) return false;      // Schmalgang nur zu Fuß
+  return mounted || !c.fahrweg || c.cross;
+};
+
+/* Nächster Punkt, an dem ein Gerät noch abgestellt werden kann */
+function parkPunkt(tx,ty){
+  const N=GW*GH, seen=new Uint8Array(N);
+  let q=[[tx,ty]]; seen[ty*GW+tx]=1;
+  while(q.length){
+    const nq=[];
+    for(const [x,y] of q){
+      if(passable(x,y,true)) return {x,y};
+      for(const [dx,dy] of DIRS){
+        const nx=x+dx, ny=y+dy;
+        if(!walkable(nx,ny))continue;
+        const i=ny*GW+nx; if(seen[i])continue;
+        seen[i]=1; nq.push([nx,ny]);
+      }
+    }
+    q=nq;
+  }
+  return {x:tx,y:ty};
+}
+
+// Bins: pro Regalkachel 3 Ebenen, Zugang aus der angrenzenden Gasse
+const bins=[];
+for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+  if(grid[y][x].t!==RACK)continue;
+  const fach = grid[y][x].zone==='FACH';
+  let acc=null;
+  if(fach){                                   // Fachboden: Gasse ober-/unterhalb
+    if(walkable(x,y+1)) acc={x,y:y+1};
+    else if(walkable(x,y-1)) acc={x,y:y-1};
+  } else {
+    if(walkable(x-1,y)) acc={x:x-1,y};
+    else if(walkable(x+1,y)) acc={x:x+1,y};
+  }
+  if(!acc)continue;
+  const list=[];
+  for(let lv=0;lv<3;lv++){
+    const b={id:`${fach?'F':'R'}${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}-${lv+1}`,
+             x,y,lv,acc,hu:null,gesperrt:false,fach};
+    bins.push(b); list.push(b);
+  }
+  grid[y][x].bins=list;
+}
+
+// Bodenstellplätze (WE / Packerei / WA / Sperr) — je Kachel eine HU
+const slots={WE:[],PACK:[],WA:[],SPERR:[],UMPACK:[],KEP:[]};
+for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+  const z=grid[y][x].zone;
+  if(slots[z]&&!grid[y][x].nurFuss){ const s={x,y,zone:z,hu:null}; grid[y][x].slot=s; slots[z].push(s); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   2 · STAMMDATEN
+   ══════════════════════════════════════════════════════════ */
+const MATS=[
+  {sku:'KAR-4030', name:'Faltkarton 400×300', col:'#C7A06A', abc:'A', gef:false, wert:180},
+  {sku:'SCH-M08',  name:'Sechskantschraube M8', col:'#8C9AA6', abc:'B', gef:false, wert:640},
+  {sku:'KAF-5000', name:'Röstkaffee 5 kg',     col:'#7A5433', abc:'A', gef:false, wert:920},
+  {sku:'FAR-10L',  name:'Lackfarbe 10 L',      col:'#C4453B', abc:'C', gef:true,  wert:1150},
+  {sku:'DIS-A1',   name:'Displaykarton A1',    col:'#5A8FA8', abc:'B', gef:false, wert:410},
+  {sku:'ELE-KBL',  name:'Anschlusskabel 3 m',  col:'#6E7F5C', abc:'A', gef:false, wert:770},
+];
+const matOf=sku=>MATS.find(m=>m.sku===sku);
+
+/* ══════════════════════════════════════════════════════════
+   3 · ZUSTAND
+   ══════════════════════════════════════════════════════════ */
+let tick=0, speed=4;
+const S={
+  hus:new Map(), husSeq:1,
+  tasks:[], taskSeq:1,
+  workers:[], workerSeq:1,
+  orders:[], orderSeq:1,
+  trucksIn:[null,null], trucksOut:[null,null],
+  hofIn:[], hofOut:[], avise:[],
+  anfragen:[], anfrageSeq:1, ruf:75, autoAnnahme:false, autoVersand:false,
+  lieferungen:[], lfSeq:1, lageraufteaege:[], laSeq:1,
+  kep:null,
+  dockClaim:{},
+  kasse:48000,
+  log:[],
+  stat:{done:0, doneWin:[], pünktlich:0, gesamt:0, bruch:0, fehlbuch:0, standgeld:0},
+  sel:null,
+};
+const SEC_PER_TICK=30;               // 1 Tick = 30 Sekunden Betriebszeit
+const MIN_PER_TICK=SEC_PER_TICK/60;
+const TICKS_PER_H=120, TICKS_PER_DAY=2880;
+const clockOf=t=>{
+  const total=t*SEC_PER_TICK + 6*3600;
+  const d=Math.floor(total/86400)+1, s=total%86400;
+  return {d, h:Math.floor(s/3600), m:Math.floor(s%3600/60)};
+};
+const shiftOf=t=>{ const h=clockOf(t).h; return h<14?0:(h<22?1:2); };
+const SHIFTNAMES=['Frühschicht','Spätschicht','Nachtschicht'];
+
+function log(msg,cls){
+  const c=clockOf(tick);
+  S.log.unshift({t:`${String(c.h).padStart(2,'0')}:${String(c.m).padStart(2,'0')}`,msg,cls});
+  if(S.log.length>60)S.log.pop();
+}
+
+/* ══════════════════════════════════════════════════════════
+   4 · WEGFINDUNG
+   ══════════════════════════════════════════════════════════ */
+const DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+function bfs(sx,sy,tx,ty,mounted,avoid){
+  if(sx<0||sy<0||sx>=GW||sy>=GH)return null;
+  if(sx===tx&&sy===ty)return [];
+  if(!passable(tx,ty,mounted))return null;
+  const N=GW*GH, prev=new Int32Array(N).fill(-1), seen=new Uint8Array(N);
+  const I=(x,y)=>y*GW+x;
+  let q=[[sx,sy]]; seen[I(sx,sy)]=1;
+  while(q.length){
+    const nq=[];
+    for(const [x,y] of q){
+      for(const [dx,dy] of DIRS){
+        const nx=x+dx, ny=y+dy;
+        const ziel=(nx===tx&&ny===ty);
+        if(!passable(nx,ny,mounted))continue;
+        if(avoid&&!ziel&&avoid.has(ny*GW+nx))continue;
+        const i=I(nx,ny);
+        if(seen[i])continue;
+        seen[i]=1; prev[i]=I(x,y);
+        if(nx===tx&&ny===ty){
+          const path=[]; let cur=i;
+          while(cur!==I(sx,sy)){ path.push({x:cur%GW,y:Math.floor(cur/GW)}); cur=prev[cur]; }
+          path.reverse();
+          const out=[];                                  // gerade Stücke zusammenfassen
+          for(let k=0;k<path.length;k++){
+            const a=out[out.length-1], b=path[k], c2=path[k+1];
+            if(a&&c2&&((a.x===b.x&&b.x===c2.x)||(a.y===b.y&&b.y===c2.y)))continue;
+            if(!a&&c2&&((sx===b.x&&b.x===c2.x)||(sy===b.y&&b.y===c2.y)))continue;
+            out.push(b);
+          }
+          return out;
+        }
+        nq.push([nx,ny]);
+      }
+    }
+    q=nq;
+  }
+  return null;
+}
+const dist=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+
+/* ══════════════════════════════════════════════════════════
+   5 · HANDLING UNITS
+   ══════════════════════════════════════════════════════════ */
+function newHU(sku,menge,art){
+  art=art||'PAL';
+  const id=(art==='KLT'?'KL':'HU')+String(S.husSeq++).padStart(5,'0');
+  const hu={id,sku,menge,art,status:'aufLKW',loc:null,bin:null,buchBin:null,slot:null,
+            x:0,y:0,orderId:null,geboren:tick,lagen:2+Math.floor(Math.random()*3)};
+  S.hus.set(id,hu); return hu;
+}
+function placeInBin(hu,bin){ bin.hu=hu; hu.bin=bin; hu.slot=null; hu.x=bin.x; hu.y=bin.y; hu.loc='BIN'; }
+function placeInSlot(hu,slot){ slot.hu=hu; hu.slot=slot; hu.bin=null; hu.x=slot.x; hu.y=slot.y; hu.loc='SLOT'; }
+function detach(hu){
+  if(hu.bin){hu.bin.hu=null;hu.bin=null}
+  if(hu.slot){hu.slot.hu=null;hu.slot=null}
+  hu.loc=null;
+}
+const freeSlot=z=>slots[z].find(s=>!s.hu);
+function freeBinNear(from,abc,maxLv,art){
+  let best=null,bd=1e9;
+  const willFach = art==='KLT';
+  for(const b of bins){
+    if(b.hu||b.gesperrt)continue;
+    if(!!b.fach!==willFach)continue;
+    if(!b.fach && maxLv!==undefined && b.lv>maxLv)continue;
+    // ABC: Schnelldreher nah an der Kommissionierseite, C-Teile hinten
+    const zonePen = abc==='A' ? b.x*0.35 : (abc==='C' ? (30-b.x)*0.35 : 0);
+    const d=dist(b,from)+b.lv*1.5+zonePen;
+    if(d<bd){bd=d;best=b}
+  }
+  return best;
+}
+
+/* ══════════════════════════════════════════════════════════
+   5b · FLURFÖRDERZEUGE — der innerbetriebliche Fuhrpark
+   ══════════════════════════════════════════════════════════ */
+const FFZ_TYPES={
+  HANDHUB:{lbl:'Handhubwagen',    kurz:'HH', speed:0.42, hub:false, schein:false, preis:900,   col:'#98A2AC', akkuV:0,       tempo:'langsam'},
+  AMEISE :{lbl:'Elektroameise',   kurz:'AM', speed:1.10, hub:false, schein:false, preis:5200,  col:'#4F8FB5', akkuV:0.00030, tempo:'schnell'},
+  KOMMI  :{lbl:'Kommissionierer', kurz:'KO', speed:0.95, hub:true,  schein:true,  preis:9800,  col:'#C7A24B', akkuV:0.00038, tempo:'zügig'},
+  STAPLER:{lbl:'Frontstapler',    kurz:'ST', speed:0.78, hub:true,  schein:true,  preis:23500, col:'#D9722B', akkuV:0.00046, tempo:'gemächlich'},
+};
+const ladeSpots=[];
+for(let y=0;y<GH;y++)for(let x=0;x<GW;x++) if(grid[y][x].zone==='LADE') ladeSpots.push({x,y});
+
+/* Paketpackplätze in der Packerei: links die angefahrene Palette,
+   in der Mitte der Packtisch, rechts der Rollwagen. */
+const PACKPLAETZE=[];
+[5,7,9,11].forEach((y,i)=>{
+  PACKPLAETZE.push({
+    id:'PP'+(i+1),
+    feed:{x:30,y}, tisch:{x:31,y}, stell:{x:32,y},
+    hu:null, wagen:null, belegt:null, orderId:null,
+  });
+});
+S.wagen=[]; S.wagenSeq=1;
+function neuerWagen(x,y,orderId){
+  const w={id:'RW'+String(S.wagenSeq++).padStart(3,'0'),x,y,pakete:0,kap:10,orderId,status:'füllen'};
+  S.wagen.push(w); return w;
+}
+const freierPackplatz=()=>PACKPLAETZE.find(pp=>!pp.orderId);
+
+S.ffz=[]; S.ffzSeq=1;
+function buyFFZ(typ,x,y){
+  const sp=ladeSpots[S.ffz.length % ladeSpots.length];
+  const v={id:FFZ_TYPES[typ].kurz+String(S.ffzSeq++).padStart(2,'0'),
+           typ, x:x??sp.x, y:y??sp.y, akku:1, worker:null};
+  S.ffz.push(v); return v;
+}
+['AMEISE','AMEISE','AMEISE','STAPLER','STAPLER','KOMMI','HANDHUB'].forEach(t=>buyFFZ(t));
+
+function parkFFZ(v){
+  const frei=ladeSpots.find(sp=>!S.ffz.some(o=>o!==v&&Math.round(o.x)===sp.x&&Math.round(o.y)===sp.y));
+  if(frei){ v.x=frei.x; v.y=frei.y; }
+}
+const ffzSpeed=w=>w.ffz?FFZ_TYPES[w.ffz.typ].speed*(w.ffz.akku<=0?0.3:1):0.6;
+const canDrive=(w,v)=>!FFZ_TYPES[v.typ].schein||w.skillStapler;
+
+/* Welche Gerätefähigkeit braucht ein Task? */
+function reqHub(t){
+  if(t.typ==='PACKEN')return null;
+  const hu=S.hus.get(t.huId);
+  if(t.typ==='KOMMISSIONIEREN') return !!(hu&&hu.bin&&!hu.bin.fach&&hu.bin.lv>0);
+  if(t.typ==='ABPACKEN') return !!(hu&&hu.bin&&hu.bin.lv>0);
+  if(t.typ==='ZUFUEHREN') return !!(hu&&hu.bin&&!hu.bin.fach&&hu.bin.lv>0);
+  if(t.typ==='PAKETIEREN') return null;
+  if(t.typ==='EINLAGERN'){
+    if(!hu||hu.art==='KLT')return false;                  // Fachboden: kein Hubgerät nötig
+    return !bins.some(b=>!b.hu&&!b.gesperrt&&!b.fach&&b.lv===0);
+  }
+  return false;
+}
+function findFFZ(w,hub){
+  let best=null,bd=1e9;
+  for(const v of S.ffz){
+    if(v.worker&&v.worker!==w.id)continue;
+    if(hub&&!FFZ_TYPES[v.typ].hub)continue;
+    if(!canDrive(w,v))continue;
+    const d=dist(v,w)+(v.akku<0.15?25:0)+(FFZ_TYPES[v.typ].hub&&!hub?12:0);
+    if(d<bd){bd=d;best=v}
+  }
+  return best;
+}
+const TYPES={
+  ENTLADEN:{lbl:'Entladen',col:'#D9722B'},
+  EINLAGERN:{lbl:'Einlagern',col:'#2E6F9E'},
+  KOMMISSIONIEREN:{lbl:'Kommissionieren',col:'#E8B923'},
+  PACKEN:{lbl:'Packen',col:'#8C6FB0'},
+  VERLADEN:{lbl:'Verladen',col:'#5FA35A'},
+  ENTSORGEN:{lbl:'Bruch räumen',col:'#C4453B'},
+  ABPACKEN:{lbl:'Vereinzeln',col:'#B07FA8'},
+  ZUFUEHREN:{lbl:'Packplatz beliefern',col:'#7FA8B0'},
+  PAKETIEREN:{lbl:'Pakete packen',col:'#C9843F'},
+  LADEN:{lbl:'Gerät laden',col:'#6E8FA0'},
+};
+function addTask(typ,huId,prio,extra){
+  const t={id:S.taskSeq++,typ,huId,prio:prio||5,state:'offen',worker:null,steps:null,si:0,
+           created:tick,...extra};
+  S.tasks.push(t); return t;
+}
+const openTasks=()=>S.tasks.filter(t=>t.state==='offen'&&!(t.blockedUntil>tick));
+
+/* ══════════════════════════════════════════════════════════
+   7 · MITARBEITER
+   ══════════════════════════════════════════════════════════ */
+/* Einsatzbereiche: bestimmen, welche Tasks ein Mitarbeiter überhaupt annimmt */
+const BEREICHE={
+  ALLE:  {lbl:'Springer',         kurz:'SPR', col:'#DDE3E9', typen:null},
+  WE:    {lbl:'Wareneingang',     kurz:'WE',  col:'#D9722B', typen:['ENTLADEN']},
+  EIN:   {lbl:'Einlagerung',      kurz:'EIN', col:'#3F86BC', typen:['EINLAGERN','ENTSORGEN']},
+  KOMM:  {lbl:'Kommissionierung', kurz:'KOM', col:'#E8B923', typen:['KOMMISSIONIEREN']},
+  UMPACK:{lbl:'Vereinzelung',     kurz:'VER', col:'#B07FA8', typen:['ABPACKEN']},
+  PACK:  {lbl:'Packerei',         kurz:'PAK', col:'#8C6FB0', typen:['PACKEN']},
+  WA:    {lbl:'Warenausgang',     kurz:'WA',  col:'#5FA35A', typen:['VERLADEN']},
+};
+const BEREICH_VON_TYP={ENTLADEN:'WE',EINLAGERN:'EIN',ENTSORGEN:'EIN',KOMMISSIONIEREN:'KOMM',
+                       ABPACKEN:'UMPACK',PACKEN:'PACK',ZUFUEHREN:'PACK',PAKETIEREN:'PACK',VERLADEN:'WA'};
+const ESKALATION=170;   // liegt ein Task so lange, darf jeder ran
+
+const VORNAMEN=['Sven','Mesut','Katrin','Jörg','Aylin','Ronny','Britta','Daniyal','Uwe','Melanie','Kai','Fatma','Holger','Nadine'];
+function hire(shift,bereich){
+  const w={
+    bereich: bereich||'ALLE',
+    id:S.workerSeq++,
+    name:VORNAMEN[(S.workerSeq*5)%VORNAMEN.length],
+    shift, x:9,y:21, px:9,py:21, mv:0,
+    tempo:0.75+Math.random()*0.4,
+    skillStapler:Math.random()<0.7,
+    erf:0, müde:0, task:null, path:null, carry:null,
+    phase:'frei', pt:0, ptMax:0,
+    idleGoal:null, aktivTicks:0,
+  };
+  S.workers.push(w); return w;
+}
+[['0','WE'],['0','KOMM'],['0','ALLE'],['0','ALLE'],
+ ['1','EIN'],['1','ALLE'],['1','ALLE'],
+ ['2','ALLE'],['2','ALLE']].forEach(([sh,b])=>hire(+sh,b));
+S.workers.forEach((w,i)=>{ w.x=w.px=8+ (i%3); w.y=w.py=21; });
+
+const onShift=w=>w.shift===shiftOf(tick);
+
+/* Ist der Punkt (nx,ny) durch einen anderen Mitarbeiter belegt?
+   Vorfahrt hat die kleinere Personalnummer; wer arbeitet, blockiert immer. */
+const KOLL_R = 0.86;
+function faehrt(w){
+  return !!(w.task && (w.phase==='weg' || (w.task.steps&&w.task.steps[w.task.si]&&w.task.steps[w.task.si].k==='DRIVE')));
+}
+function blockiert(w,nx,ny){
+  if(w.squeeze>0) return false;                 // Notfall-Vorbeischlängeln
+  const wFaehrt=faehrt(w);
+  for(const o of S.workers){
+    if(o===w||!onShift(o))continue;
+    const dx=o.x-nx, dy=o.y-ny;
+    if(dx*dx+dy*dy >= KOLL_R*KOLL_R) continue;
+    if(!wFaehrt) return true;                   // ohne Auftrag hat man nie Vorfahrt
+    if(!faehrt(o)) return true;                 // der andere steht und arbeitet
+    return w.id > o.id;                         // beide fahren: höhere Nummer weicht
+  }
+  return false;
+}
+/* Punkt kurz vor dem Fahrzeug, an dem geprüft wird */
+function vorausPunkt(w,tx,ty,d){
+  const dx=tx-w.x, dy=ty-w.y, len=Math.hypot(dx,dy);
+  if(len<1e-6) return {x:w.x,y:w.y};
+  return {x:w.x+dx/len*d, y:w.y+dy/len*d};
+}
+/* Position nach einer Strecke entlang des Pfades — ohne zu bewegen */
+function pfadPunkt(w,strecke){
+  let x=w.x,y=w.y,rest=strecke;
+  for(let i=0;i<w.path.length&&rest>0;i++){
+    const n=w.path[i], dx=n.x-x, dy=n.y-y, d=Math.hypot(dx,dy);
+    if(d<=rest){ x=n.x; y=n.y; rest-=d; }
+    else { x+=dx/d*rest; y+=dy/d*rest; rest=0; }
+  }
+  return {x,y};
+}
+
+/* Bewegt den Mitarbeiter stufenlos am Pfad entlang — mehrere Wegpunkte
+   pro Tick möglich, Restweg wird mitgenommen. Kein Kachelspringen. */
+function glide(w,speed){
+  let rest=Math.max(0.02,speed);
+  while(rest>0 && w.path.length){
+    const n=w.path[0];
+    const dx=n.x-w.x, dy=n.y-w.y;
+    const d=Math.hypot(dx,dy);
+    if(d<=rest+1e-6){ w.x=n.x; w.y=n.y; w.path.shift(); rest-=d; }
+    else { w.x+=dx/d*rest; w.y+=dy/d*rest; w.dir=Math.atan2(dy,dx); rest=0; }
+  }
+}
+
+/* ── Schrittfolgen je Task-Typ ── */
+function buildSteps(t,w){
+  const hu=t.huId?S.hus.get(t.huId):null;
+  if(!hu && t.typ!=='PAKETIEREN')return null;
+  const maxLv = (w.ffz&&FFZ_TYPES[w.ffz.typ].hub) ? 2 : 0;
+  switch(t.typ){
+    case 'ENTLADEN':{
+      const d=DOORS_IN[t.door];
+      const s=freeSlot('WE'); if(!s)return null;
+      t.slot=s; s.hu='RES';
+      const yl=d.y-0.5;                                  // Mittellinie des Aufliegers
+      return [{k:'GOTO',x:1,y:d.y},
+              {k:'DRIVE',x:-2.5,y:yl,l:'In den Auflieger'},
+              {k:'WORK',d:7,l:'Gabel einfahren'},
+              {k:'PICK'},
+              {k:'WORK',d:4,l:'Anheben'},
+              {k:'DRIVE',x:1.2,y:yl,rev:true,l:'Rückwärts heraus'},
+              {k:'GOTO',x:s.x,y:s.y},{k:'WORK',d:9,l:'Absetzen'},
+              {k:'DROPSLOT',slot:s},{k:'WORK',d:4,l:'Buchen'},{k:'BOOK'}];
+    }
+    case 'EINLAGERN':{
+      const b=freeBinNear({x:hu.x,y:hu.y},matOf(hu.sku).abc,maxLv,hu.art); if(!b)return null;
+      t.bin=b; b.hu='RES';
+      if(b.fach){                                   // Schmalgang: Gerät bleibt draußen
+        const pk=parkPunkt(b.acc.x,b.acc.y);
+        return [{k:'GOTO',x:hu.x,y:hu.y},{k:'WORK',d:4,l:'Aufnehmen'},{k:'PICK'},
+                {k:'GOTO',x:pk.x,y:pk.y},{k:'WORK',d:3,l:'Absitzen'},{k:'ABSITZEN'},
+                {k:'GOTO',x:b.acc.x,y:b.acc.y},{k:'WORK',d:7,l:'Einsortieren'},
+                {k:'DROPBIN',bin:b},{k:'WORK',d:3,l:'Buchen'},{k:'BOOK'},
+                {k:'GOTO',x:pk.x,y:pk.y},{k:'AUFSITZEN'}];
+      }
+      const nx=b.acc.x+(b.x-b.acc.x)*0.42, ny=b.acc.y+(b.y-b.acc.y)*0.42;
+      return [{k:'GOTO',x:hu.x,y:hu.y},{k:'WORK',d:6,l:'Gabel einfahren'},{k:'PICK'},
+              {k:'WORK',d:3,l:'Anheben'},
+              {k:'GOTO',x:b.acc.x,y:b.acc.y},
+              {k:'WORK',d:5,l:'Mast ausrichten'},
+              {k:'DRIVE',x:nx,y:ny,l:'Einfahren'},
+              {k:'WORK',d:9,l:'Absetzen'},
+              {k:'DROPBIN',bin:b},
+              {k:'DRIVE',x:b.acc.x,y:b.acc.y,rev:true,l:'Rückwärts frei'},
+              {k:'WORK',d:4,l:'Buchen'},{k:'BOOK'}];
+    }
+    case 'KOMMISSIONIEREN':{
+      const s=freeSlot('PACK'); if(!s)return null;
+      t.slot=s; s.hu='RES';
+      const acc=hu.bin?hu.bin.acc:{x:hu.x,y:hu.y};
+      const bn=hu.bin;
+      if(bn&&bn.fach){
+        const pk=parkPunkt(acc.x,acc.y);
+        return [{k:'GOTO',x:pk.x,y:pk.y},{k:'WORK',d:3,l:'Absitzen'},{k:'ABSITZEN'},
+                {k:'GOTO',x:acc.x,y:acc.y},{k:'WORK',d:4,l:'Suchen'},
+                {k:'WORK',d:6,l:'Entnehmen'},{k:'PICK'},
+                {k:'GOTO',x:pk.x,y:pk.y},{k:'AUFSITZEN'},
+                {k:'GOTO',x:s.x,y:s.y},{k:'WORK',d:9,l:'Absetzen'},
+                {k:'DROPSLOT',slot:s},{k:'WORK',d:4,l:'Buchen'},{k:'BOOK'}];
+      }
+      const kx=bn?acc.x+(bn.x-acc.x)*0.42:acc.x, ky=bn?acc.y+(bn.y-acc.y)*0.42:acc.y;
+      return [{k:'GOTO',x:acc.x,y:acc.y},{k:'WORK',d:5,l:'Suchen'},
+              {k:'DRIVE',x:kx,y:ky,l:'Einfahren'},
+              {k:'WORK',d:8,l:'Entnehmen'},{k:'PICK'},
+              {k:'DRIVE',x:acc.x,y:acc.y,rev:true,l:'Rückwärts frei'},
+              {k:'GOTO',x:s.x,y:s.y},{k:'WORK',d:9,l:'Absetzen'},
+              {k:'DROPSLOT',slot:s},{k:'WORK',d:4,l:'Buchen'},{k:'BOOK'}];
+    }
+    case 'ABPACKEN':{
+      const s2=freeSlot('UMPACK'); if(!s2)return null;
+      t.slot=s2; s2.hu='RES';
+      const acc=hu.bin?hu.bin.acc:{x:hu.x,y:hu.y};
+      return [{k:'GOTO',x:acc.x,y:acc.y},{k:'WORK',d:8,l:'Auslagern'},{k:'PICK'},
+              {k:'GOTO',x:s2.x,y:s2.y},{k:'WORK',d:9,l:'Absetzen'},{k:'DROPSLOT',slot:s2},
+              {k:'WORK',d:24,l:'Vereinzeln'},{k:'VEREINZELN'}];
+    }
+    case 'ZUFUEHREN':{
+      const pp=PACKPLAETZE.find(x=>x.id===t.platz); if(!pp||pp.hu)return null;
+      const acc=hu.bin?hu.bin.acc:{x:hu.x,y:hu.y};
+      const kx=hu.bin?acc.x+(hu.bin.x-acc.x)*0.42:acc.x;
+      const ky=hu.bin?acc.y+(hu.bin.y-acc.y)*0.42:acc.y;
+      return [{k:'GOTO',x:acc.x,y:acc.y},{k:'WORK',d:5,l:'Suchen'},
+              {k:'DRIVE',x:kx,y:ky,l:'Einfahren'},
+              {k:'WORK',d:8,l:'Auslagern'},{k:'PICK'},
+              {k:'DRIVE',x:acc.x,y:acc.y,rev:true,l:'Rückwärts frei'},
+              {k:'GOTO',x:pp.feed.x,y:pp.feed.y},{k:'WORK',d:9,l:'Bereitstellen'},
+              {k:'FEEDDROP',pp}];
+    }
+    case 'PAKETIEREN':{
+      const pp=PACKPLAETZE.find(x=>x.id===t.platz); if(!pp)return null;
+      const pkp=parkPunkt(pp.tisch.x,pp.tisch.y);
+      const st=[{k:'GOTO',x:pkp.x,y:pkp.y},{k:'WORK',d:3,l:'Gerät abstellen'},{k:'RELEASE'},
+                {k:'GOTO',x:pp.tisch.x,y:pp.tisch.y},{k:'WORK',d:4,l:'Platz rüsten'}];
+      for(let i=0;i<t.anzahl;i++){
+        st.push({k:'WORK',d:7,l:`Paket ${i+1}/${t.anzahl}`},{k:'PAKET',pp});
+      }
+      st.push({k:'WORK',d:4,l:'Rollwagen sichern'},{k:'WAGENAUF',pp},
+              {k:'GOTO',x:0,y:0,kep:true},{k:'WORK',d:4,l:'Abstellen'},{k:'WAGENAB'});
+      return st;
+    }
+    case 'PACKEN':
+      return [{k:'GOTO',x:hu.x,y:hu.y},{k:'WORK',d:20,l:'Packen'},{k:'PACKDONE'}];
+    case 'VERLADEN':{
+      const d=DOORS_OUT[t.door];
+      const yv=d.y-0.5;
+      return [{k:'GOTO',x:hu.x,y:hu.y},{k:'WORK',d:6,l:'Gabel einfahren'},{k:'PICK'},
+              {k:'WORK',d:3,l:'Anheben'},
+              {k:'GOTO',x:GW-2,y:d.y},
+              {k:'DRIVE',x:GW+2.4,y:yv,l:'In den Auflieger'},
+              {k:'WORK',d:8,l:'Verladen'},{k:'LOAD'},
+              {k:'DRIVE',x:GW-2,y:yv,rev:true,l:'Rückwärts heraus'}];
+    }
+    case 'ENTSORGEN':{
+      const s=freeSlot('SPERR'); if(!s)return null;
+      t.slot=s; s.hu='RES';
+      return [{k:'GOTO',x:hu.x,y:hu.y},{k:'WORK',d:6,l:'Aufnehmen'},{k:'PICK'},
+              {k:'GOTO',x:s.x,y:s.y},{k:'WORK',d:8,l:'Absetzen'},{k:'DROPSLOT',slot:s},{k:'BOOK'}];
+    }
+  }
+}
+
+/* ── Vergabe: Pull-Prinzip, Prio vor Nähe ── */
+function tryAssign(w,relax){
+  const cands=openTasks();
+  if(!cands.length)return false;
+  let best=null,bs=-1e9,bestVeh=null;
+  const ber=BEREICHE[w.bereich]||BEREICHE.ALLE;
+  for(const t of cands){
+    const hu=t.huId?S.hus.get(t.huId):null;
+    if(!hu && t.typ!=='PAKETIEREN') continue;
+    let ref=hu;
+    if(!ref){                                   // Tasks ohne Ladeeinheit: Ort ist der Packplatz
+      const pp=PACKPLAETZE.find(x=>x.id===t.platz);
+      ref = pp?pp.tisch:{x:w.x,y:w.y};
+    }
+    // Bereichszuteilung: eigener Bereich zuerst, Fremdes nur beim Aushelfen
+    const fremd = ber.typen && !ber.typen.includes(t.typ);
+    if(fremd && !relax && tick-t.created<ESKALATION) continue;
+    // In einen Auflieger passt immer nur ein Gerät
+    const dk = t.typ==='ENTLADEN' ? 'WE'+t.door : (t.typ==='VERLADEN' ? 'WA'+t.door : null);
+    if(dk && S.dockClaim[dk] && S.dockClaim[dk]!==w.id) continue;
+    const hub=reqHub(t);
+    let veh=null;
+    if(hub!==null){
+      // Passt das aufgesessene Gerät? Sonst freies suchen.
+      if(w.ffz && (!hub || FFZ_TYPES[w.ffz.typ].hub)) veh=w.ffz;
+      else veh=findFFZ(w,hub);
+      if(!veh)continue;                       // kein Gerät verfügbar → Task bleibt liegen
+    }
+    const d=dist({x:ref.x,y:ref.y},w) + (veh&&veh!==w.ffz?dist(veh,w)*0.6:0);
+    const sc=(10-t.prio)*12 - d + (tick-t.created)*0.15 - (fremd?30:0);
+    if(sc>bs){bs=sc;best=t;bestVeh=veh}
+  }
+  if(!best)return false;
+
+  const pre=[];
+  if(bestVeh && bestVeh!==w.ffz){
+    if(w.ffz) pre.push({k:'RELEASE'});
+    pre.push({k:'GOTO',x:bestVeh.x,y:bestVeh.y},{k:'WORK',d:2,l:'Aufsitzen'},{k:'MOUNT',veh:bestVeh});
+    bestVeh.worker=w.id; best.veh=bestVeh;
+  }
+  const savedFfz=w.ffz; if(bestVeh)w.ffz=bestVeh;   // für Bin-Auswahl vorausschauen
+  const steps=buildSteps(best,w);
+  w.ffz=savedFfz;
+  if(!steps){
+    if(best.veh&&best.veh.worker===w.id&&best.veh!==w.ffz)best.veh.worker=null;
+    best.veh=null; return false;
+  }
+  const dkey = best.typ==='ENTLADEN' ? 'WE'+best.door : (best.typ==='VERLADEN' ? 'WA'+best.door : null);
+  if(dkey){ S.dockClaim[dkey]=w.id; best.dockKey=dkey; }
+  best.steps=pre.concat(steps); best.si=0; best.state='inArbeit'; best.worker=w.id;
+  w.task=best; w.phase='start'; startStep(w);
+  return true;
+}
+
+/* Zuweisung in zwei Stufen: eigener Bereich zuerst, dann Aushilfe */
+function assign(w){
+  if(tryAssign(w,false))return true;
+  if((w.idleT||0)>12 && tryAssign(w,true)){ w.aushilfe=true; return true; }
+  return false;
+}
+
+/* Leeres Gerät zurück an die Ladestation bringen */
+function startCharge(w){
+  const spot=ladeSpots.find(s=>!S.ffz.some(v=>v!==w.ffz&&Math.round(v.x)===s.x&&Math.round(v.y)===s.y)) || ladeSpots[0];
+  const t={id:S.taskSeq++,typ:'LADEN',huId:null,prio:9,state:'inArbeit',worker:w.id,si:0,created:tick,
+           steps:[{k:'GOTO',x:spot.x,y:spot.y},{k:'WORK',d:3,l:'Abstellen'},{k:'RELEASE'}]};
+  S.tasks.push(t); w.task=t; w.phase='start'; startStep(w);
+}
+
+function startStep(w){
+  const t=w.task; if(!t)return;
+  if(t.huId && !S.hus.get(t.huId)){ abortTask(w); return; }
+  if(t.si>=t.steps.length){ finishTask(w); return; }
+  const st=t.steps[t.si];
+  if(st.k==='DRIVE'){ w.phase=st.l||'Rangieren'; w.path=null; return; }
+  if(st.k==='GOTO' && st.kep){
+    const sl=slots.KEP.find(x=>!x.hu) || slots.KEP[0];
+    st.x=sl.x; st.y=sl.y; st.kep=false;
+  }
+  if(st.k==='GOTO'){
+    let sx=Math.round(w.x), sy=Math.round(w.y);
+    if(!walkable(sx,sy)){                     // z. B. noch im Auflieger: nächste Kachel suchen
+      let bd=1e9,bx=sx,by=sy;
+      for(let yy=0;yy<GH;yy++)for(let xx=0;xx<GW;xx++){
+        if(!walkable(xx,yy))continue;
+        const dd=Math.abs(xx-w.x)+Math.abs(yy-w.y);
+        if(dd<bd){bd=dd;bx=xx;by=yy;}
+      }
+      sx=bx; sy=by; w.x=bx; w.y=by;
+    }
+    const p=bfs(sx,sy,st.x,st.y,!!w.ffz);
+    if(p===null){ if(w.task)w.task.blockedUntil=tick+30; abortTask(w); return; }
+    // Erst sanft auf die Kachelmitte ziehen, dann dem Pfad folgen
+    w.path=(Math.abs(w.x-sx)>0.05||Math.abs(w.y-sy)>0.05) ? [{x:sx,y:sy}].concat(p) : p;
+    w.phase='weg';
+  } else if(st.k==='WORK'){
+    w.phase=st.l; w.pt=0; w.ptMax=Math.round(st.d/w.tempo);
+  } else { applyStep(w,st); if(w.task!==t)return; t.si++; startStep(w); }
+}
+
+function applyStep(w,st){
+  const t=w.task, hu=t.huId?S.hus.get(t.huId):null;
+  const brauchtHU=['PICK','DROPSLOT','DROPBIN','PACKDONE','LOAD','VEREINZELN'].includes(st.k);
+  if(brauchtHU && !hu){ abortTask(w); return; }
+  switch(st.k){
+    case 'ABSITZEN':
+      if(w.ffz){ w.parkFFZ=w.ffz; w.ffz=null; }   // Gerät bleibt reserviert stehen
+      break;
+    case 'AUFSITZEN':
+      if(w.parkFFZ){ w.ffz=w.parkFFZ; w.parkFFZ=null; }
+      break;
+    case 'MOUNT':
+      w.ffz=st.veh; st.veh.worker=w.id; st.veh.x=w.x; st.veh.y=w.y;
+      break;
+    case 'RELEASE':
+      if(w.ffz){ w.ffz.worker=null; w.ffz=null; }
+      break;
+    case 'PICK':
+      detach(hu); hu.loc='WORKER'; w.carry=hu.id;
+      // Bruchrisiko steigt mit Müdigkeit
+      if(Math.random()<0.004+w.müde*0.02){
+        hu.status='beschädigt'; S.stat.bruch++;
+        log(`Bruch: ${hu.id} (${hu.sku}) beim Aufnehmen beschädigt`,'bad');
+      }
+      break;
+    case 'DROPSLOT':
+      placeInSlot(hu,st.slot); w.carry=null;
+      if(t.typ==='ENTLADEN')hu.status='imWEPuffer';
+      if(t.typ==='KOMMISSIONIEREN')hu.status='inPackerei';
+      if(t.typ==='ENTSORGEN')hu.status='gesperrt';
+      break;
+    case 'DROPBIN':{
+      let ziel=st.bin;
+      // Fehlbuchung: Griff ins Nachbarfach, gebucht wird das Sollfach
+      if(Math.random()<0.012+w.müde*0.05){
+        const nb=grid[st.bin.y][st.bin.x].bins.find(b=>!b.hu&&b!==st.bin);
+        if(nb){ ziel=nb; }
+      }
+      placeInBin(hu,ziel);
+      hu.buchBin=st.bin.id;
+      if(st.bin!==ziel){ st.bin.hu=null; S.stat.fehlbuch++;
+        log(`Fehlbuchung: ${hu.id} liegt ${ziel.id}, gebucht ${st.bin.id}`,'bad'); }
+      hu.status='eingelagert'; w.carry=null;
+      break;
+    }
+    case 'VEREINZELN':{
+      const platz=hu.slot;
+      detach(hu); S.hus.delete(hu.id);
+      const n=3;
+      let erzeugt=0;
+      for(let i=0;i<n;i++){
+        const ziel = i===0 ? platz : freeSlot('UMPACK');
+        if(!ziel)break;
+        const klt=newHU(hu.sku, Math.round(hu.menge/n), 'KLT');
+        klt.status='vereinzelt'; placeInSlot(klt,ziel);
+        addTask('EINLAGERN',klt.id,5);
+        erzeugt++;
+      }
+      log(`${hu.sku} vereinzelt · ${erzeugt} KLT ins Fachbodenlager`);
+      break;
+    }
+    case 'FEEDDROP':{
+      const pp=st.pp;
+      detach(hu); hu.loc='SLOT'; hu.x=pp.feed.x; hu.y=pp.feed.y; hu.status='amPackplatz';
+      pp.hu=hu; w.carry=null;
+      break;
+    }
+    case 'PAKET':{
+      const pp=st.pp;
+      if(!pp.wagen) pp.wagen=neuerWagen(pp.stell.x,pp.stell.y,pp.orderId);
+      pp.wagen.pakete++;
+      if(pp.hu){ pp.hu.menge=Math.max(0,pp.hu.menge-2); }   // Ware von der Palette
+      break;
+    }
+    case 'WAGENAUF':{
+      const pp=st.pp;
+      if(pp.wagen){ w.carryWagen=pp.wagen; pp.wagen.status='transport'; pp.wagen=null; }
+      if(pp.hu){                                  // Anbruchpalette räumen
+        const rest=pp.hu;
+        rest.orderId=null;
+        if(rest.menge<=0){ S.hus.delete(rest.id); }
+        else { rest.status='imWEPuffer'; addTask('EINLAGERN',rest.id,6); }
+        pp.hu=null;
+      }
+      pp.orderId=null; pp.gepackt=false;
+      break;
+    }
+    case 'WAGENAB':{
+      const rw=w.carryWagen;
+      if(rw){
+        const sl=freeSlot('KEP');
+        if(sl){ sl.hu=rw; rw.x=sl.x; rw.y=sl.y; rw.slot=sl; }
+        rw.status='bereit'; w.carryWagen=null;
+        log(`${rw.id} bereitgestellt · ${rw.pakete} Pakete`);
+      }
+      break;
+    }
+    case 'PACKDONE':
+      hu.status='versandbereit';
+      if(hu.slot){ hu.slot.hu=null; hu.slot=null; }
+      { const s=freeSlot('WA'); if(s)placeInSlot(hu,s); else { const p=freeSlot('PACK'); if(p)placeInSlot(hu,p); } }
+      break;
+    case 'LOAD':{
+      detach(hu); hu.status='ausgeliefert'; w.carry=null;
+      const tr=S.trucksOut[t.door];
+      if(tr){ tr.geladen++; }
+      S.hus.delete(hu.id);
+      break;
+    }
+    case 'BOOK': w.erf++; break;
+  }
+}
+
+function finishTask(w){
+  const t=w.task;
+  t.state='fertig';
+  if(t.dockKey && S.dockClaim[t.dockKey]===w.id) delete S.dockClaim[t.dockKey];
+  if(t.typ!=='LADEN'){ S.stat.done++; S.stat.doneWin.push(tick); }
+  S.tasks=S.tasks.filter(x=>x!==t);
+  w.task=null; w.phase='frei'; w.path=null;
+  followUp(t);
+}
+/* Holt einen Mitarbeiter zurück aufs Raster — etwa wenn ein Task
+   abbricht, während er im Auflieger steht. */
+function aufsRaster(w){
+  const sx=Math.round(w.x), sy=Math.round(w.y);
+  if(walkable(sx,sy) && !(w.ffz&&grid[sy][sx].nurFuss)){ w.x=sx; w.y=sy; return; }
+  let bd=1e9,bx=1,by=1;
+  for(let yy=1;yy<GH-1;yy++)for(let xx=1;xx<GW-1;xx++){
+    if(!walkable(xx,yy))continue;
+    if(w.ffz&&grid[yy][xx].nurFuss)continue;
+    if(S.workers.some(o=>o!==w&&onShift(o)&&Math.round(o.x)===xx&&Math.round(o.y)===yy))continue;
+    const dd=Math.abs(xx-w.x)+Math.abs(yy-w.y);
+    if(dd<bd){bd=dd;bx=xx;by=yy;}
+  }
+  w.x=bx; w.y=by; w.path=null; w.rev=false;
+}
+
+function nächsterFreierPlatz(x,y){
+  let best=null,bd=1e9;
+  for(const z of ['WE','PACK','UMPACK','SPERR']) for(const sl of slots[z]){
+    if(sl.hu)continue;
+    const d=Math.abs(sl.x-x)+Math.abs(sl.y-y);
+    if(d<bd){bd=d;best=sl}
+  }
+  return best;
+}
+function abortTask(w){
+  const t=w.task;
+  if(w.parkFFZ){ w.parkFFZ.worker=null; w.parkFFZ=null; }   // abgestelltes Gerät freigeben
+  if(w.carryWagen){                                // Rollwagen nicht verlieren
+    const rw=w.carryWagen, sl=slots.KEP.find(x=>!x.hu);
+    if(sl){ sl.hu=rw; rw.x=sl.x; rw.y=sl.y; rw.status='bereit'; }
+    w.carryWagen=null;
+  }
+  if(w.carry){                                     // Ladung absetzen statt verlieren
+    const hu=S.hus.get(w.carry);
+    const sl=hu?nächsterFreierPlatz(Math.round(w.x),Math.round(w.y)):null;
+    if(hu&&sl){ placeInSlot(hu,sl); hu.status=hu.art==='KLT'?'vereinzelt':'imWEPuffer';
+                if(!S.tasks.some(x=>x.huId===hu.id)) addTask('EINLAGERN',hu.id,4); }
+    else if(hu&&hu.orderId){
+      const wa=freeSlot('WA')||freeSlot('PACK');
+      if(wa) placeInSlot(hu,wa);
+    }
+    else if(hu){
+      const b=freeBinNear({x:Math.round(w.x),y:Math.round(w.y)},matOf(hu.sku).abc,2,hu.art);
+      if(b){ placeInBin(hu,b); hu.buchBin=b.id; hu.status='eingelagert'; }
+    }
+    w.carry=null;
+  }
+  aufsRaster(w);
+  if(t){ if(t.dockKey && S.dockClaim[t.dockKey]===w.id) delete S.dockClaim[t.dockKey];
+         if(t.slot&&t.slot.hu==='RES')t.slot.hu=null;
+         if(t.bin&&t.bin.hu==='RES')t.bin.hu=null;
+         if(t.veh&&t.veh.worker===w.id&&t.veh!==w.ffz)t.veh.worker=null;
+         if(t.typ==='LADEN'){ S.tasks=S.tasks.filter(x=>x!==t); }
+         else { t.state='offen'; t.worker=null; t.steps=null; t.veh=null; } }
+  w.task=null; w.phase='frei'; w.path=null;
+}
+
+/* ── Folgeprozesse ── */
+function followUp(t){
+  if(!t.huId)return;
+  const hu=S.hus.get(t.huId); if(!hu)return;
+  if(hu.status==='beschädigt' && t.typ!=='ENTSORGEN'){ addTask('ENTSORGEN',hu.id,3); return; }
+  if(t.typ==='ENTLADEN')      addTask('EINLAGERN',hu.id,5);
+  if(t.typ==='KOMMISSIONIEREN')addTask('PACKEN',hu.id,4);
+  if(t.typ==='PACKEN')        checkOrderReady(hu.orderId);
+}
+
+/* ══════════════════════════════════════════════════════════
+   8 · ANLIEFERUNG & AUFTRÄGE
+   ══════════════════════════════════════════════════════════ */
+/* Avis: Anlieferung wird vorher angekündigt — Planungsvorlauf statt Überraschung */
+function announceTruck(){
+  const n=3+Math.floor(Math.random()*5);
+  const lead=60+Math.floor(Math.random()*80);
+  S.avise.push({n, ankunftGeplant:tick+lead,
+    lieferant:['Nordfracht','Kettler Logistik','SpedTrans','Möller & Sohn'][Math.floor(Math.random()*4)]});
+  log(`Avis: ${n} Paletten in ca. ${Math.round(lead*MIN_PER_TICK/60)} h`);
+}
+function arriveTruck(av){
+  const hus=[];
+  for(let i=0;i<av.n;i++){
+    const m=MATS[Math.floor(Math.random()*MATS.length)];
+    hus.push(newHU(m.sku,20+Math.floor(Math.random()*80)));
+  }
+  const tr={hus:hus.map(h=>h.id),ankunft:tick,lieferant:av.lieferant,door:null,
+            docked:false,vis:newVis(-1),seite:-1};
+  S.hofIn.push(tr);
+  routeToQueue(tr,S.hofIn.length-1);
+  log(`${av.lieferant} fährt auf das Gelände · ${av.n} Paletten`,'hot');
+}
+
+/* Über die Einfahrt auf die Wartespur */
+function routeToQueue(tr,i){
+  const s=tr.seite, qx=QUEUE_X(s), qy=queueY(Math.min(i,2));
+  // Schon auf dem Gelände? Dann nur aufrücken, nicht zurück zur Straße.
+  if(tr.vis.y < ROAD_Y-2.5) setWp(tr.vis,[{x:qx, y:qy, ang:-90}]);
+  else setWp(tr.vis,[{x:qx, y:ROAD_Y, ang:0},{x:qx, y:qy, ang:-90}]);
+}
+/* Vor das Tor ziehen und rückwärts an die Rampe setzen */
+function routeToDock(tr,doorY){
+  const s=tr.seite;
+  setWp(tr.vis,[
+    {x:LANE_X(s), y:doorY+5.5, ang:-90},
+    {x:LANE_X(s), y:doorY,     ang:s<0?180:0},
+    {x:DOCK_X(s), y:doorY,     ang:s<0?180:0, rev:true},
+  ]);
+}
+/* Vom Tor über die Ausfahrt vom Gelände */
+function routeAway(tr,doorY){
+  const s=tr.seite;
+  setWp(tr.vis,[
+    {x:LANE_X(s), y:doorY, ang:s<0?180:0},
+    {x:LANE_X(s), y:ROAD_Y-0.8, ang:90},
+    {x:GW+YARD+9, y:ROAD_Y, ang:0},
+  ]);
+}
+function setWp(v,list){ v.wp=list.slice(); v.done=false; }
+/* Andocken, sobald ein Tor frei wird */
+function dockTrucks(){
+  for(let d=0;d<S.trucksIn.length;d++){
+    if(S.trucksIn[d]||!S.hofIn.length)continue;
+    const tr=S.hofIn.shift();
+    tr.door=d; tr.docked=false; tr.angedockt=null;
+    S.trucksIn[d]=tr;
+    routeToDock(tr,DOORS_IN[d].y);
+    log(`${tr.lieferant} rangiert an WE ${d+1}`);
+    S.hofIn.forEach((t,i)=>routeToQueue(t,i));   // Schlange rückt auf
+  }
+  for(let d=0;d<S.trucksOut.length;d++){
+    if(S.trucksOut[d]||!S.hofOut.length)continue;
+    const o=S.hofOut.shift();
+    const tr={order:o.id,geladen:0,soll:o.hus.length,door:d,ankunft:tick,
+              docked:false,vis:newVis(1),seite:1,hus:o.hus.slice()};
+    S.trucksOut[d]=tr;
+    setWp(tr.vis,[
+      {x:GW+YARD-1.5, y:ROAD_Y, ang:0},
+      {x:LANE_X(1), y:DOORS_OUT[d].y+5.5, ang:-90},
+      {x:LANE_X(1), y:DOORS_OUT[d].y, ang:0},
+      {x:DOCK_X(1), y:DOORS_OUT[d].y, ang:0, rev:true},
+    ]);
+    o.status='verladen';
+    log(`Frachtführer für ${o.id} fährt an WA ${d+1} vor`,'hot');
+  }
+}
+
+/* ── Kundenanfragen: kommen herein, wollen geprüft und beschieden werden ── */
+const KUNDEN=['Elbe Handel','Vierlanden Bau','Nordmarkt GmbH','Kontor 14','Bergedorfer Werke',
+              'Alstertal Retail','Süderelbe Technik','Hanse Möbel'];
+
+function verfuegbar(sku,art){
+  let n=0;
+  for(const hu of S.hus.values())
+    if(hu.sku===sku&&hu.art===art&&hu.status==='eingelagert'&&!hu.orderId)n++;
+  return n;
+}
+function pruefeAnfrage(a){
+  if(a.kanal==='KEP') return verfuegbar(a.sku,'PAL')>0 ? 0 : a.pakete;
+  let fehlt=0;
+  for(const pos of a.positionen) fehlt += Math.max(0,pos.anzahl-verfuegbar(pos.sku,pos.art));
+  return fehlt;
+}
+function spawnAnfrage(){
+  if(Math.random()<0.32){                       // Paketauftrag statt Palettensendung
+    const m=MATS[Math.floor(Math.random()*MATS.length)];
+    const pakete=4+Math.floor(Math.random()*7);
+    const eilig=Math.random()<0.3;
+    const a={
+      id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
+      kunde:KUNDEN[Math.floor(Math.random()*KUNDEN.length)],
+      kanal:'KEP', sku:m.sku, pakete, eilig,
+      positionen:[{sku:m.sku,anzahl:pakete,art:'PKT'}],
+      wunsch: tick+(eilig?800:1700)+Math.floor(Math.random()*700),
+      erloes: Math.round(pakete*(eilig?300:215)*(0.85+S.ruf/100*0.3)),
+      strafe: Math.round(pakete*130),
+      ablauf: tick+180+Math.floor(Math.random()*160),
+      created: tick,
+    };
+    S.anfragen.push(a);
+    log(`Anfrage ${a.id} · ${a.kunde} · ${pakete} Pakete`,'hot');
+    return a;
+  }
+  const positionen=[];
+  const n=1+Math.floor(Math.random()*2);
+  for(let i=0;i<n;i++){
+    const m=MATS[Math.floor(Math.random()*MATS.length)];
+    positionen.push({sku:m.sku,anzahl:1+Math.floor(Math.random()*2),
+                     art: Math.random()<0.4?'KLT':'PAL'});
+  }
+  const stueck=positionen.reduce((x,p)=>x+p.anzahl,0);
+  const eilig=Math.random()<0.28;
+  const frist = eilig ? 700+Math.floor(Math.random()*400)
+                      : 1600+Math.floor(Math.random()*1200);
+  const rufFaktor = 0.85+S.ruf/100*0.3;
+  const a={
+    id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
+    kunde:KUNDEN[Math.floor(Math.random()*KUNDEN.length)],
+    positionen, eilig,
+    wunsch: tick+frist,
+    erloes: Math.round(stueck*(eilig?520:360)*rufFaktor),
+    strafe: Math.round(stueck*(eilig?340:220)),
+    ablauf: tick+180+Math.floor(Math.random()*160),
+    created: tick,
+  };
+  S.anfragen.push(a);
+  log(`Anfrage ${a.id} · ${a.kunde}${a.eilig?' · EILIG':''}`,'hot');
+  return a;
+}
+/* Annahme mit Terminvereinbarung. 'spaeter' verschiebt den zugesagten
+   Warenausgang, kostet Erlös, verhindert aber die Pönale. */
+function annehmen(a,modus){
+  const spaeter = modus==='spaeter';
+  const o={id:a.id,
+           kunde:a.kunde, positionen:a.positionen,
+           kanal:a.kanal||'LKW', sku:a.sku, pakete:a.pakete,
+           due: a.wunsch + (spaeter?700:0),
+           wunsch:a.wunsch,
+           erloes: Math.round(a.erloes*(spaeter?0.85:1)),
+           strafe:a.strafe, verschoben:spaeter,
+           eil:!!a.eilig, hus:[], status:'angenommen', created:tick,
+           lf:null, la:null};
+  S.orders.push(o);
+  S.anfragen=S.anfragen.filter(x=>x!==a);
+  if(spaeter) S.ruf=Math.max(0,S.ruf-0.6);
+  log(`${o.id} angenommen · WA-Termin ${spaeter?'verschoben':'wie gewünscht'}`);
+  if(S.autoVersand) lieferungAnlegen(o);
+  return o;
+}
+
+/* Versandabteilung: aus dem Kundenauftrag wird eine Lieferung */
+function lieferungAnlegen(o){
+  if(o.status!=='angenommen')return null;
+  const lf={id:'LF'+String(S.lfSeq++).padStart(4,'0'), ka:o.id, kunde:o.kunde,
+            kanal:o.kanal, termin:o.due, positionen:o.positionen,
+            status:'angelegt', created:tick};
+  S.lieferungen.push(lf);
+  o.lf=lf.id; o.status='lieferung';
+  log(`${lf.id} angelegt zu ${o.id}`);
+  if(S.autoVersand) anLagerUebergeben(lf);
+  return lf;
+}
+
+/* Übergabe ans Lager: Lagerauftrag mit Lageraufgaben entsteht */
+function anLagerUebergeben(lf){
+  if(lf.status!=='angelegt')return false;
+  const o=S.orders.find(x=>x.id===lf.ka); if(!o)return false;
+  const la={id:'LA'+String(S.laSeq++).padStart(4,'0'), lf:lf.id, ka:o.id,
+            status:'offen', created:tick};
+  S.lageraufteaege.push(la);
+  lf.status='imLager'; lf.la=la.id;
+  o.la=la.id; o.status='offen';
+  log(`${la.id} an das Lager übergeben`);
+  return true;
+}
+function ablehnen(a){
+  S.anfragen=S.anfragen.filter(x=>x!==a);
+  S.ruf=Math.max(0,S.ruf-1.5);
+  log(`${a.id} abgelehnt · Ruf ${Math.round(S.ruf)}`);
+}
+
+function tryPick(o){
+  const need=[];
+  for(const p of o.positionen){
+    let rest=p.anzahl;
+    for(const hu of S.hus.values()){
+      if(rest<=0)break;
+      if(hu.sku===p.sku&&hu.art===(p.art||'PAL')&&hu.status==='eingelagert'&&!hu.orderId){ need.push(hu); rest--; }
+    }
+    if(rest>0)return false;  // Fehlmenge → Auftrag wartet
+  }
+  need.forEach(hu=>{ hu.orderId=o.id; o.hus.push(hu.id);
+    addTask('KOMMISSIONIEREN',hu.id, (o.eil||tick>o.due-420)?2:5, {la:o.la}); });
+  o.status='inArbeit';
+  const la=S.lageraufteaege.find(x=>x.id===o.la);
+  if(la){ la.status='inArbeit'; la.soll=need.length; }
+  log(`${o.la||o.id} · ${need.length} Lageraufgaben angelegt`);
+  return true;
+}
+
+/* Paketauftrag: Packplatz belegen und Palette anfordern */
+function startePaketauftrag(o){
+  if(PACKPLAETZE.filter(x=>x.orderId).length>=2) return false;
+  const pp=freierPackplatz(); if(!pp)return false;
+  let pal=null;
+  for(const hu of S.hus.values())
+    if(hu.sku===o.sku&&hu.art==='PAL'&&hu.status==='eingelagert'&&!hu.orderId){ pal=hu; break; }
+  if(!pal)return false;
+  pp.orderId=o.id; pp.gepackt=false;
+  pal.orderId=o.id;
+  o.status='inArbeit'; o.platz=pp.id;
+  addTask('ZUFUEHREN',pal.id,o.eil?2:5,{platz:pp.id,la:o.la});
+  const la0=S.lageraufteaege.find(x=>x.id===o.la);
+  if(la0){ la0.status='inArbeit'; la0.soll=1+o.pakete; }
+  log(`${o.la||o.id} → ${pp.id} · ${o.pakete} Pakete`);
+  return true;
+}
+
+/* Paketdienst: kommt, wenn Rollwagen bereitstehen, und lädt sie auf */
+function kepAbholung(){
+  const bereit=slots.KEP.filter(sl=>sl.hu&&sl.hu.status==='bereit');
+  if(!S.kep && bereit.length>=2 && tick%15===0){
+    S.kep={vis:newVis(1), phase:'anfahrt', geladen:0, soll:bereit.length, wartet:0};
+    setWp(S.kep.vis,[
+      {x:LANE_X(1), y:ROAD_Y,          ang:0},
+      {x:LANE_X(1), y:KEP_DOOR.y+3.2,  ang:-90},
+      {x:GW+2.4,    y:KEP_DOOR.y,      ang:0, rev:true},
+    ]);
+    log('Paketdienst angekündigt','hot');
+  }
+  if(!S.kep)return;
+  const k=S.kep;
+  stepVis(k.vis);
+  if(k.phase==='anfahrt' && k.vis.done){ k.phase='laden'; k.wartet=0; }
+  else if(k.phase==='laden'){
+    k.wartet++;
+    if(k.wartet%22===0){                       // Fahrer lädt einen Wagen
+      const sl=slots.KEP.find(x=>x.hu&&x.hu.status==='bereit');
+      if(sl){
+        const rw=sl.hu;
+        const o=S.orders.find(x=>x.id===rw.orderId);
+        if(o&&o.status!=='erledigt'){
+          const pünktlich=tick<=o.due;
+          S.stat.gesamt++; if(pünktlich)S.stat.pünktlich++;
+          S.kasse += (o.erloes||rw.pakete*215) - (pünktlich?0:(o.strafe||0));
+          S.ruf=Math.max(0,Math.min(100,S.ruf+(pünktlich?1.0:-3)));
+          o.status='erledigt';
+          const lfk=S.lieferungen.find(x=>x.id===o.lf); if(lfk)lfk.status='ausgeliefert';
+          const lak=S.lageraufteaege.find(x=>x.id===o.la); if(lak)lak.status='erledigt';
+          log(`${o.lf||o.id} per Paketdienst raus · ${rw.pakete} Pakete · ${pünktlich?'termingerecht':'VERSPÄTET'}`,
+              pünktlich?'':'bad');
+        }
+        S.wagen=S.wagen.filter(x=>x!==rw);
+        sl.hu=null; k.geladen++;
+      } else { k.phase='abfahrt';
+        setWp(k.vis,[{x:LANE_X(1),y:KEP_DOOR.y,ang:0},
+                     {x:LANE_X(1),y:ROAD_Y-0.8,ang:90},
+                     {x:GW+YARD+9,y:ROAD_Y,ang:0}]); }
+    }
+  }
+  else if(k.phase==='abfahrt' && k.vis.done){ S.kep=null; }
+}
+
+function checkOrderReady(oid){
+  const o=S.orders.find(x=>x.id===oid); if(!o||o.status!=='inArbeit')return;
+  const alle=o.hus.every(id=>{const h=S.hus.get(id);return !h||h.status==='versandbereit'});
+  if(!alle)return;
+  if(S.hofOut.includes(o))return;
+  o.status='wartetAufTor';
+  S.hofOut.push(o);
+  log(`${o.id} versandbereit · wartet auf Tor`);
+}
+
+/* ══════════════════════════════════════════════════════════
+   9 · SIMULATIONS-TICK
+   ══════════════════════════════════════════════════════════ */
+function simTick(){
+  tick++;
+
+  // ── LKW-Bewegung auf dem Gelände
+  S.hofIn.forEach(tr=>stepVis(tr.vis));
+  S.trucksIn.forEach((tr,i)=>{
+    if(!tr)return;
+    stepVis(tr.vis);
+    if(!tr.vis.done)return;
+    if(!tr.docked&&!tr.abfahrt){                       // Rampe erreicht → Entladung startet
+      tr.docked=true; tr.angedockt=tick;
+      tr.hus.forEach(id=>addTask('ENTLADEN',id,4,{door:i}));
+      log(`${tr.lieferant} steht an WE ${i+1} · Entladung frei`);
+    } else if(tr.abfahrt){                             // Gelände verlassen
+      log(`${tr.lieferant} verlässt das Gelände`);
+      S.trucksIn[i]=null;
+    }
+  });
+  S.trucksOut.forEach((tr,i)=>{
+    if(!tr)return;
+    stepVis(tr.vis);
+    if(!tr.vis.done)return;
+    if(!tr.docked&&!tr.abfahrt){
+      tr.docked=true;
+      tr.hus.forEach(id=>{ if(S.hus.get(id))addTask('VERLADEN',id,2,{door:i}); });
+      log(`Tor WA ${i+1} bereit für ${tr.order}`);
+    } else if(tr.abfahrt){
+      S.trucksOut[i]=null;
+    }
+  });
+
+  // Avis & Aufträge — bewusst ruhige Taktung
+  if(tick%660===0){
+    const belegt=bins.filter(b=>b.hu&&!b.fach).length/bins.filter(b=>!b.fach).length;
+    if(belegt>0.92){                       // Annahmestopp statt stillem Verklemmen
+      if(!S.annahmestopp){ S.annahmestopp=true; log('Lager voll · Wareneingang gestoppt','bad'); }
+    } else { if(S.annahmestopp){ S.annahmestopp=false; log('Wareneingang wieder frei'); }
+             announceTruck(); }
+  }
+  if(tick%420===0) spawnAnfrage();
+
+  for(let i=S.avise.length-1;i>=0;i--){
+    if(tick>=S.avise[i].ankunftGeplant){ arriveTruck(S.avise[i]); S.avise.splice(i,1); }
+  }
+  if(tick%4===0) dockTrucks();
+
+  // Nachschub Vereinzelung: Fachbodenlager auffüllen
+  if(tick%45===0){
+    for(const m of MATS){
+      const klt=[...S.hus.values()].filter(h=>h.sku===m.sku&&h.art==='KLT'&&!h.orderId).length;
+      const läuft=S.tasks.some(t=>t.typ==='ABPACKEN'&&S.hus.get(t.huId)&&S.hus.get(t.huId).sku===m.sku);
+      if(klt>=3||läuft)continue;
+      const pal=[...S.hus.values()].find(h=>h.sku===m.sku&&h.art==='PAL'&&h.status==='eingelagert'&&!h.orderId&&h.bin&&!h.bin.fach);
+      if(pal&&slots.UMPACK.some(sl=>!sl.hu)) addTask('ABPACKEN',pal.id,6);
+    }
+  }
+
+  // Anfragen laufen ab, wenn niemand entscheidet
+  for(let i=S.anfragen.length-1;i>=0;i--){
+    if(tick>=S.anfragen[i].ablauf){
+      const a=S.anfragen[i];
+      if(S.autoAnnahme && pruefeAnfrage(a)===0){ annehmen(a,'wunsch'); }
+      else { S.anfragen.splice(i,1); S.ruf=Math.max(0,S.ruf-2.5);
+             log(`Anfrage ${a.id} verfallen · Ruf ${Math.round(S.ruf)}`,'bad'); }
+    }
+  }
+  // Versandabteilung arbeitet automatisch, wenn eingeschaltet
+  if(S.autoVersand && tick%10===0){
+    for(const o of S.orders) if(o.status==='angenommen') lieferungAnlegen(o);
+    for(const lf of S.lieferungen) if(lf.status==='angelegt') anLagerUebergeben(lf);
+  }
+  // Freigegebene Aufträge einplanen
+  if(tick%20===0){
+    for(const o of S.orders){
+      if(o.status!=='offen')continue;
+      if(o.kanal==='KEP') startePaketauftrag(o); else tryPick(o);
+    }
+  }
+  // Ist die Palette am Packplatz, kann gepackt werden
+  if(tick%10===0){
+    for(const pp of PACKPLAETZE){
+      if(!pp.orderId||!pp.hu)continue;
+      const o=S.orders.find(x=>x.id===pp.orderId);
+      if(!o||o.status!=='inArbeit')continue;
+      if(S.tasks.some(t=>t.typ==='PAKETIEREN'&&t.platz===pp.id))continue;
+      if(pp.gepackt)continue;
+      pp.gepackt=true;
+      addTask('PAKETIEREN',null,o.eil?2:5,{platz:pp.id,anzahl:o.pakete,orderId:o.id,la:o.la});
+    }
+  }
+  // Liegengebliebene Aufträge verwerfen, sonst blockieren sie den Platz
+  if(tick%60===0){
+    for(let i=S.tasks.length-1;i>=0;i--){
+      const t=S.tasks[i];
+      if(t.state!=='offen')continue;
+      const tot = (t.huId && !S.hus.get(t.huId)) ||
+                  (tick-t.created>900 && (t.typ==='ZUFUEHREN'||t.typ==='PAKETIEREN'));
+      if(!tot)continue;
+      if(t.platz){
+        const pp=PACKPLAETZE.find(x=>x.id===t.platz);
+        if(pp){ pp.orderId=null; pp.gepackt=false; }
+        const o=S.orders.find(x=>x.id===t.orderId);
+        if(o&&o.status==='inArbeit'){ o.status='offen'; o.platz=null; }
+      }
+      const hu=t.huId?S.hus.get(t.huId):null;
+      if(hu&&t.typ==='ZUFUEHREN') hu.orderId=null;
+      S.tasks.splice(i,1);
+    }
+  }
+
+  // Packplätze überwachen, damit keiner dauerhaft belegt bleibt
+  if(tick%40===0){
+    for(const pp of PACKPLAETZE){
+      if(!pp.orderId)continue;
+      const o=S.orders.find(x=>x.id===pp.orderId);
+      if(!o||o.status==='erledigt'){ pp.orderId=null; pp.gepackt=false; continue; }
+      const laeuft=S.tasks.some(t=>(t.typ==='ZUFUEHREN'||t.typ==='PAKETIEREN')&&t.platz===pp.id);
+      if(laeuft||pp.hu)continue;
+      let pal=null;
+      for(const hu of S.hus.values())
+        if(hu.sku===o.sku&&hu.art==='PAL'&&hu.status==='eingelagert'&&(!hu.orderId||hu.orderId===o.id)){pal=hu;break;}
+      if(pal){ pal.orderId=o.id; addTask('ZUFUEHREN',pal.id,o.eil?2:5,{platz:pp.id}); }
+      else { pp.orderId=null; pp.gepackt=false; o.status='offen'; o.platz=null; }
+    }
+  }
+  // Paketdienst rufen, sobald Rollwagen bereitstehen
+  kepAbholung();
+
+  // Eingangs-LKW: Standgeld nach 1 h im Hof
+  S.trucksIn.forEach((tr,i)=>{
+    if(!tr||!tr.docked)return;
+    const rest=tr.hus.filter(id=>{const h=S.hus.get(id);return h&&h.status==='aufLKW'}).length;
+    if(rest===0&&!tr.abfahrt){
+      tr.abfahrt=true; tr.docked=false;
+      routeAway(tr,DOORS_IN[i].y);
+      log(`${tr.lieferant} entladen · WE ${i+1} wird frei`);
+      return;
+    }
+    if(tick-tr.ankunft>2*TICKS_PER_H && (tick-tr.ankunft)%120===0){
+      S.kasse-=45; S.stat.standgeld+=45;
+      log(`Standgeld WE ${i+1}: −45 €`,'bad');
+    }
+  });
+  S.hofIn.forEach(tr=>{
+    if(tick-tr.ankunft>2*TICKS_PER_H && (tick-tr.ankunft)%120===0){
+      S.kasse-=45; S.stat.standgeld+=45;
+    }
+  });
+
+  // Watchdog: kein Tor darf wegen eines verlorenen Tasks blockieren
+  if(tick%30===0){
+    S.trucksIn.forEach((tr,i)=>{
+      if(!tr||!tr.docked)return;
+      for(const id of tr.hus){
+        const h=S.hus.get(id); if(!h||h.status!=='aufLKW')continue;
+        if(!S.tasks.some(t=>t.huId===id)) addTask('ENTLADEN',id,4,{door:i});
+      }
+    });
+    S.trucksOut.forEach((tr,i)=>{
+      if(!tr||!tr.docked||tr.geladen>=tr.soll)return;
+      let vorhanden=0;
+      for(const id of tr.hus){
+        const h=S.hus.get(id); if(!h)continue;
+        vorhanden++;
+        if(!S.tasks.some(t=>t.huId===id)) addTask('VERLADEN',id,2,{door:i});
+      }
+      if(tr.geladen+vorhanden<tr.soll) tr.soll=tr.geladen+vorhanden;   // Sendung geschrumpft
+    });
+  }
+
+  // Ausgangs-LKW
+  S.trucksOut.forEach((tr,i)=>{
+    if(!tr||!tr.docked||tr.abfahrt)return;
+    if(tr.geladen>=tr.soll){
+      const o=S.orders.find(x=>x.id===tr.order);
+      const pünktlich=tick<=o.due;
+      S.stat.gesamt++; if(pünktlich)S.stat.pünktlich++;
+      const erlös=(o.erloes||tr.soll*340) - (pünktlich?0:(o.strafe||260));
+      S.kasse+=erlös;
+      const lfx=S.lieferungen.find(x=>x.id===o.lf); if(lfx)lfx.status='ausgeliefert';
+      const lax=S.lageraufteaege.find(x=>x.id===o.la); if(lax)lax.status='erledigt';
+      S.ruf = Math.max(0,Math.min(100, S.ruf + (pünktlich?1.2:-4)));
+      o.status='erledigt';
+      tr.abfahrt=true; tr.docked=false;
+      routeAway(tr,DOORS_OUT[i].y);
+      log(`${o.id} abgefahren · ${pünktlich?'termingerecht':'VERSPÄTET'} · ${erlös>0?'+':''}${erlös} €`, pünktlich?'':'bad');
+    }
+  });
+
+  // Mitarbeiter
+  for(const w of S.workers){
+    if(!onShift(w)){
+      if(w.task)abortTask(w);
+      if(w.ffz){ parkFFZ(w.ffz); w.ffz.worker=null; w.ffz=null; }   // Gerät abstellen, nicht stehen lassen
+      if(w.parkFFZ){ parkFFZ(w.parkFFZ); w.parkFFZ.worker=null; w.parkFFZ=null; }
+      continue;
+    }
+    w.px=w.x; w.py=w.y;
+    if(w.squeeze>0) w.squeeze--;
+
+    if(w.task){
+      w.aktivTicks++;
+      w.müde=Math.min(1,w.müde+0.00045);
+      const st=w.task.steps[w.task.si];
+      if(st&&st.k==='DRIVE'){
+        const dx=st.x-w.x, dy=st.y-w.y, d=Math.hypot(dx,dy);
+        const sp=ffzSpeed(w)*w.tempo*(st.rev?0.34:0.55);   // rückwärts deutlich langsamer
+        w.rev=!!st.rev;
+        const pr=vorausPunkt(w,st.x,st.y,Math.min(d,Math.max(sp,0.5)));
+        if(blockiert(w,pr.x,pr.y)){
+          w.blockT=(w.blockT||0)+1;
+          if(w.blockT>55){ w.squeeze=16; w.blockT=0; }   // sonst hängt das Rangieren fest
+        }
+        else if(d<=sp||d<0.02){ w.x=st.x; w.y=st.y; w.rev=false; w.blockT=0; w.task.si++; startStep(w); }
+        else { w.x+=dx/d*sp; w.y+=dy/d*sp; w.blockT=0;
+               if(w.ffz&&w.ffz.worker===w.id) w.ffz.akku=Math.max(0,w.ffz.akku-FFZ_TYPES[w.ffz.typ].akkuV*0.5); }
+      }
+      else if(w.phase==='weg'){
+        if(!w.path||!w.path.length){ w.task.si++; startStep(w); }
+        else{
+          const schritt=ffzSpeed(w)*w.tempo*(1-w.müde*0.35);
+          const pr=pfadPunkt(w,Math.max(schritt,0.5));
+          if(blockiert(w,pr.x,pr.y)){
+            w.blockT=(w.blockT||0)+1;
+            if(w.blockT===22 && !w.umgeplant){      // einmal um die Belegung herum planen
+              const meide=new Set();
+              for(const o of S.workers) if(o!==w&&onShift(o)&&!faehrt(o))
+                meide.add(Math.round(o.y)*GW+Math.round(o.x));
+              const zt=w.task.steps[w.task.si];
+              const alt=bfs(Math.round(w.x),Math.round(w.y),zt.x,zt.y,!!w.ffz,meide);
+              if(alt&&alt.length){ w.path=alt; w.blockT=1; w.umgeplant=true; }
+            }
+            if(w.blockT>55){ w.squeeze=16; w.blockT=0; w.umgeplant=false; }
+          } else {
+            w.blockT=0; w.umgeplant=false;
+            glide(w, ffzSpeed(w)*w.tempo*(1-w.müde*0.35));
+            if(w.ffz&&w.ffz.worker===w.id) w.ffz.akku=Math.max(0,w.ffz.akku-FFZ_TYPES[w.ffz.typ].akkuV);
+          }
+          if(!w.path.length){ w.task.si++; startStep(w); }
+        }
+      } else if(st&&st.k==='WORK'){
+        w.pt++;
+        if(w.pt>=w.ptMax){ w.task.si++; startStep(w); }
+      }
+    } else {
+      w.müde=Math.max(0,w.müde-0.0012);
+      if(w.ffz && w.ffz.akku<0.12){ startCharge(w); }
+      else if(!assign(w)){
+        w.idleT=(w.idleT||0)+1;
+        if(!walkable(Math.round(w.x),Math.round(w.y))) aufsRaster(w);
+        if(w.ffz && w.idleT>24){ startCharge(w); }   // Gerät nicht blockieren
+        else {
+          // Leerlauf: Richtung Pausenraum schlendern, nicht einfrieren
+          if(!w.idleGoal||dist(w,w.idleGoal)<1){
+            let zg=null;
+            for(let v=0;v<8&&!zg;v++){
+              const c={x:8+Math.floor(Math.random()*4),y:20+Math.floor(Math.random()*3)};
+              if(!S.workers.some(o=>o!==w&&onShift(o)&&Math.round(o.x)===c.x&&Math.round(o.y)===c.y)) zg=c;
+            }
+            w.idleGoal=zg||{x:9,y:21};
+            w.path=bfs(Math.round(w.x),Math.round(w.y),w.idleGoal.x,w.idleGoal.y,!!w.ffz)||[];
+          }
+          if(w.path&&w.path.length){
+            const n0=w.path[0], pr=vorausPunkt(w,n0.x,n0.y,0.5);
+            if(!blockiert(w,pr.x,pr.y)) glide(w,0.34); else w.path=null;
+          }
+        }
+      } else w.idleT=0;
+    }
+  }
+
+  // Blickrichtung: ergibt sich aus der Bewegung des letzten Ticks
+  for(const w of S.workers){
+    const mdx=w.x-w.px, mdy=w.y-w.py;
+    if(mdx||mdy) w.dir = w.rev ? Math.atan2(-mdy,-mdx) : Math.atan2(mdy,mdx);
+    else if(w.dir===undefined) w.dir=-Math.PI/2;
+  }
+
+  // Fuhrpark: Gerät folgt dem Fahrer, geparkte Geräte laden an der Station
+  for(const v of S.ffz){
+    const drv=v.worker?S.workers.find(w=>w.id===v.worker):null;
+    if(drv&&onShift(drv)&&drv.ffz===v){ v.x=drv.x; v.y=drv.y; v.dir=drv.dir; }
+    else if(drv&&onShift(drv)&&drv.parkFFZ===v){ /* steht am Gassenkopf, bleibt reserviert */ }
+    else{
+      if(v.worker){
+        const alt=S.workers.find(w=>w.id===v.worker);
+        if(alt) alt.ffz=null;                              // beidseitig lösen, sonst Doppelbelegung
+        v.worker=null; parkFFZ(v);
+      }
+      const gy=Math.round(v.y), gx=Math.round(v.x);
+      if(grid[gy]&&grid[gy][gx]&&grid[gy][gx].zone==='LADE')
+        v.akku=Math.min(1,v.akku+0.0022);
+    }
+  }
+
+  // Laufende Kosten: Lohn je Stunde
+  if(tick%TICKS_PER_H===0){ S.kasse-=S.workers.length*19; }
+  S.stat.doneWin=S.stat.doneWin.filter(t=>t>tick-4*TICKS_PER_H);
+}
+
+/* ══════════════════════════════════════════════════════════
+   10 · RENDERING
+   ══════════════════════════════════════════════════════════ */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const YARD=8;                       // Hoffläche links und rechts der Halle
+const YB=4;                          // Zufahrtsstraße unterhalb der Halle
+const ROAD_Y=GH+2;
+let TS=16, OX=0, OY=0, OX0=0, OY0=0, DPR=1;
+let panX=0, panY=0;
+let zoomAlles=!window.matchMedia('(max-width:900px)').matches;
+const istMobil=()=>window.matchMedia('(max-width:900px)').matches;
+function clampPan(){
+  const r=cv.parentElement.getBoundingClientRect();
+  const wW=TS*(GW+2*YARD), wH=TS*(GH+YB);
+  const maxX=Math.max(0,(wW-r.width)/2+TS*2), maxY=Math.max(0,(wH-r.height)/2+TS*2);
+  panX=Math.max(-maxX,Math.min(maxX,panX));
+  panY=Math.max(-maxY,Math.min(maxY,panY));
+  OX=OX0+panX; OY=OY0+panY;
+}
+function resize(){
+  const r=cv.parentElement.getBoundingClientRect();
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  cv.width=r.width*DPR; cv.height=r.height*DPR;
+  const fitW=r.width/(GW+2*YARD), fitH=r.height/(GH+YB);
+  // Am Handy nach Höhe skalieren und seitlich schiebbar lassen,
+  // sonst bleiben nur wenige Pixel pro Kachel übrig.
+  TS = zoomAlles ? Math.floor(Math.min(fitW,fitH))
+                 : Math.max(Math.floor(fitH),Math.floor(fitW));
+  TS=Math.max(4,TS);
+  OX0=Math.floor((r.width-TS*(GW+2*YARD))/2)+TS*YARD;
+  OY0=Math.floor((r.height-TS*(GH+YB))/2);
+  clampPan();
+}
+window.addEventListener('resize',resize);
+
+const show={tasks:false,buch:true,binids:false};
+
+
+/* ── Europalette in Draufsicht: Deckbretter + gestapelte, gewickelte Ware ── */
+function drawPalette(px,py,w,h,mat,opt){
+  opt=opt||{};
+  const f=Math.min(w,h);
+  // Palettenklötze / Deckbretter
+  ctx.fillStyle='#8A6A3E';
+  ctx.fillRect(px,py,w,h);
+  ctx.fillStyle='#A6814D';
+  const bretter=3, bh=h/(bretter*2-1);
+  for(let i=0;i<bretter;i++) ctx.fillRect(px, py+i*bh*2, w, bh);
+  ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=0.6;
+  ctx.strokeRect(px+0.3,py+0.3,w-0.6,h-0.6);
+  // Ware auf der Palette, leicht eingerückt = Höhe
+  const inset=Math.max(1,f*0.16);
+  const gx=px+inset, gy=py+inset, gw=w-inset*2, gh=h-inset*2;
+  ctx.fillStyle='rgba(0,0,0,.32)';
+  ctx.fillRect(gx+inset*0.4,gy+inset*0.4,gw,gh);
+  ctx.fillStyle=mat.col;
+  ctx.fillRect(gx,gy,gw,gh);
+  // Kartonfugen
+  if(gw>5&&gh>5){
+    ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=0.7;
+    ctx.beginPath();
+    ctx.moveTo(gx+gw/2,gy); ctx.lineTo(gx+gw/2,gy+gh);
+    ctx.moveTo(gx,gy+gh/2); ctx.lineTo(gx+gw,gy+gh/2);
+    ctx.stroke();
+  }
+  // Stretchfolie: heller Glanz oben links
+  ctx.fillStyle='rgba(255,255,255,.16)';
+  ctx.fillRect(gx,gy,gw,Math.max(1,gh*0.2));
+  if(mat.gef){                                   // Gefahrgutraute
+    ctx.fillStyle='#F0D36B';
+    ctx.beginPath();
+    ctx.moveTo(gx+gw/2,gy+gh*0.22); ctx.lineTo(gx+gw*0.74,gy+gh/2);
+    ctx.lineTo(gx+gw/2,gy+gh*0.78); ctx.lineTo(gx+gw*0.26,gy+gh/2);
+    ctx.closePath(); ctx.fill();
+  }
+  if(opt.rand){ ctx.strokeStyle=opt.rand; ctx.lineWidth=1.4;
+    ctx.strokeRect(px+0.7,py+0.7,w-1.4,h-1.4); }
+}
+
+/* ── Kleinladungsträger: einzelner Karton mit Deckelfuge ── */
+function drawKLT(px,py,w,h,mat,opt){
+  opt=opt||{};
+  ctx.fillStyle='rgba(0,0,0,.30)';
+  ctx.fillRect(px+1.2,py+1.2,w,h);
+  ctx.fillStyle=mat.col;
+  ctx.fillRect(px,py,w,h);
+  ctx.fillStyle='rgba(255,255,255,.18)';
+  ctx.fillRect(px,py,w,Math.max(1,h*0.26));
+  ctx.strokeStyle='rgba(0,0,0,.40)'; ctx.lineWidth=0.7;
+  ctx.beginPath(); ctx.moveTo(px+w/2,py); ctx.lineTo(px+w/2,py+h); ctx.stroke();
+  ctx.strokeRect(px+0.35,py+0.35,w-0.7,h-0.7);
+  if(opt.rand){ ctx.strokeStyle=opt.rand; ctx.lineWidth=1.4;
+    ctx.strokeRect(px+0.7,py+0.7,w-1.4,h-1.4); }
+}
+const drawHU=(hu,px,py,w,h,opt)=>
+  hu.art==='KLT' ? drawKLT(px,py,w,h,matOf(hu.sku),opt) : drawPalette(px,py,w,h,matOf(hu.sku),opt);
+
+
+
+/* Rollwagen: Gitterkorb mit gestapelten Paketen */
+function drawRollwagen(gx,gy,rw,skal){
+  const u=TS*(skal||1), px=gx*TS+(TS-u)/2, py=gy*TS+(TS-u)/2;
+  ctx.fillStyle='rgba(0,0,0,.32)'; ctx.fillRect(px+1.5,py+1.5,u,u);
+  ctx.fillStyle='#3A424A'; ctx.fillRect(px,py,u,u);
+  ctx.strokeStyle='#8A949E'; ctx.lineWidth=1;          // Gitterstäbe
+  ctx.beginPath();
+  for(let i=1;i<4;i++){ ctx.moveTo(px+i*u/4,py); ctx.lineTo(px+i*u/4,py+u);
+                        ctx.moveTo(px,py+i*u/4); ctx.lineTo(px+u,py+i*u/4); }
+  ctx.stroke();
+  ctx.strokeStyle='#C2CBD4'; ctx.lineWidth=1.4; ctx.strokeRect(px+.7,py+.7,u-1.4,u-1.4);
+  const n=Math.min(rw.pakete,9), s=u/3.4;              // Pakete im Korb
+  for(let i=0;i<n;i++){
+    const bx=px+u*0.10+(i%3)*(s+u*0.035), by=py+u*0.10+Math.floor(i/3)*(s+u*0.035);
+    ctx.fillStyle='#C08B52'; ctx.fillRect(bx,by,s,s);
+    ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=.7;
+    ctx.beginPath(); ctx.moveTo(bx+s/2,by); ctx.lineTo(bx+s/2,by+s); ctx.stroke();
+  }
+  if(TS>13){
+    ctx.fillStyle='rgba(16,19,23,.75)'; ctx.fillRect(px,py+u-u*0.30,u,u*0.30);
+    ctx.fillStyle='#E8B923'; ctx.font=`600 ${u*0.26}px 'IBM Plex Mono'`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(rw.pakete+'/'+rw.kap, px+u/2, py+u-u*0.15);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  }
+}
+
+/* KEP-Transporter: kompakter Kastenwagen */
+function drawKEP(px,py,angDeg){
+  const u=TS, L=2.9*u, B=1.35*u;
+  ctx.save(); ctx.translate(px*u,py*u); ctx.rotate(angDeg*Math.PI/180);
+  ctx.fillStyle='rgba(0,0,0,.34)'; ctx.fillRect(-L/2+2,-B/2+2,L,B);
+  ctx.fillStyle='#D8DDE2'; ctx.fillRect(-L/2,-B/2,L,B);            // Kofferaufbau
+  ctx.fillStyle='rgba(0,0,0,.10)'; ctx.fillRect(-L/2,B/2-B*0.18,L,B*0.18);
+  ctx.fillStyle='#C9843F'; ctx.fillRect(-L*0.30,-B*0.16,L*0.34,B*0.32);   // Firmenstreifen
+  ctx.fillStyle='#2A3138'; ctx.fillRect(L*0.20,-B/2+B*0.10,L*0.20,B*0.80); // Fahrerhaus
+  ctx.fillStyle='#7FA6BF'; ctx.fillRect(L*0.38,-B/2+B*0.16,L*0.07,B*0.68); // Scheibe
+  ctx.fillStyle='#1A2027';
+  ctx.fillRect(-L*0.40,-B/2-2,L*0.13,B+4); ctx.fillRect(L*0.20,-B/2-2,L*0.13,B+4);
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fillRect(-L/2,-B/2,L*0.05,B);      // Hecktür
+  ctx.restore();
+}
+
+/* ── Mitarbeiter in Draufsicht: Schultern mit Warnweste, Helm, Blickrichtung ── */
+function drawWorker(cx,cy,w,r){
+  const dir=w.dir||0;
+  const sitzt=!!w.ffz;
+  const sc=sitzt?0.72:1;                       // aufgesessen kleiner
+  const br=r*1.55*sc;                          // Schulterbreite (quer)
+  const tf=r*0.92*sc;                          // Rumpftiefe (längs)
+  const müde=w.müde>0.55;
+  const weste=müde?'#BFB93A':'#E8E23A';
+  const helm=(BEREICHE[w.bereich]||BEREICHE.ALLE).col;
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(dir);
+
+  if(!sitzt){                                   // Schatten nur beim Gehen
+    ctx.fillStyle='rgba(0,0,0,.30)';
+    ctx.beginPath(); ctx.ellipse(1.5,1.5,tf*0.75,br*0.55,0,0,7); ctx.fill();
+  }
+
+  // Arme als schmale Stummel seitlich
+  ctx.fillStyle=müde?'#8E8A2E':'#B8B22E';
+  ctx.fillRect(-tf*0.15,-br*0.62,tf*0.55,br*0.22);
+  ctx.fillRect(-tf*0.15, br*0.40,tf*0.55,br*0.22);
+
+  // Rumpf: Schultern breiter als tief
+  ctx.fillStyle=weste;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(-tf*0.55,-br*0.5,tf*1.1,br,Math.min(tf,br)*0.35);
+  else ctx.rect(-tf*0.55,-br*0.5,tf*1.1,br);
+  ctx.fill();
+
+  // Reflexstreifen quer über die Weste
+  if(r*sc>3.2){
+    ctx.fillStyle='rgba(244,248,252,.72)';
+    ctx.fillRect(-tf*0.20,-br*0.5,tf*0.16,br);
+    ctx.fillRect( tf*0.06,-br*0.5,tf*0.16,br);
+  }
+
+  // Helm sitzt leicht nach vorn — zeigt die Blickrichtung
+  ctx.fillStyle='rgba(0,0,0,.35)';
+  ctx.beginPath(); ctx.arc(tf*0.16,0,r*0.50*sc,0,7); ctx.fill();
+  ctx.fillStyle=helm;
+  ctx.beginPath(); ctx.arc(tf*0.14,0,r*0.44*sc,0,7); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.30)';        // Lichtkante auf dem Helm
+  ctx.beginPath(); ctx.arc(tf*0.22,-r*0.10*sc,r*0.18*sc,0,7); ctx.fill();
+
+  ctx.restore();
+}
+
+/* Schwarz-gelbes Absperrband als Bereichsmarkierung */
+function hazard(px,py,w,h,horizontal){
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px,py,w,h); ctx.clip();
+  ctx.fillStyle='#141A1F'; ctx.fillRect(px,py,w,h);
+  ctx.fillStyle='#E8B923';
+  const step=Math.max(5,TS*0.34), len=horizontal?w:h;
+  for(let i=-Math.max(w,h);i<len+Math.max(w,h);i+=step*2){
+    ctx.beginPath();
+    if(horizontal){
+      ctx.moveTo(px+i,py+h); ctx.lineTo(px+i+step,py+h);
+      ctx.lineTo(px+i+step+h,py); ctx.lineTo(px+i+h,py);
+    } else {
+      ctx.moveTo(px,py+i); ctx.lineTo(px,py+i+step);
+      ctx.lineTo(px+w,py+i+step+w); ctx.lineTo(px+w,py+i+w);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ── Flurförderzeuge in Draufsicht. Gabeln zeigen nach vorn (+x). ──
+      Jeder Typ hat eine eigene Silhouette, damit er auf einen Blick
+      unterscheidbar ist: Handhubwagen nur Gabel mit Deichselgriff,
+      Ameise mit Batteriekasten und langer Deichsel, Kommissionierer
+      mit Trittplattform, Stapler mit Gegengewicht, Hubmast und Schutzdach. */
+function drawFFZ(gx,gy,typ,alpha,akku,dir){
+  const F=FFZ_TYPES[typ], u=TS;
+  const cx=gx*u+u/2, cy=gy*u+u/2;
+  const stahl='#333B44', dunkel='#1A2027';
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.translate(cx,cy);
+  ctx.rotate(dir||0);
+
+  ctx.fillStyle='rgba(0,0,0,.30)';                       // Schatten
+  ctx.fillRect(-u*0.55+1.5,-u*0.34+1.5,u*1.3,u*0.68);
+
+  const gabel=(len,spread,dick)=>{                        // Gabelzinken
+    ctx.fillStyle=stahl;
+    ctx.fillRect(u*0.12,-u*spread-u*dick/2,u*len,u*dick);
+    ctx.fillRect(u*0.12, u*spread-u*dick/2,u*len,u*dick);
+    ctx.fillStyle='rgba(255,255,255,.13)';
+    ctx.fillRect(u*0.12,-u*spread-u*dick/2,u*len,u*dick*0.35);
+    ctx.fillRect(u*0.12, u*spread-u*dick/2,u*len,u*dick*0.35);
+  };
+  const rad=(x,y,l,b)=>{ ctx.fillStyle=dunkel; ctx.fillRect(u*x,u*y,u*l,u*b); };
+
+  if(typ==='HANDHUB'){
+    gabel(0.86,0.20,0.11);
+    ctx.fillStyle=F.col;                                  // Pumpeneinheit
+    ctx.fillRect(-u*0.12,-u*0.26,u*0.26,u*0.52);
+    ctx.fillStyle=stahl;                                  // Deichsel
+    ctx.fillRect(-u*0.52,-u*0.045,u*0.42,u*0.09);
+    ctx.fillRect(-u*0.60,-u*0.20,u*0.09,u*0.40);          // Handgriff quer
+    rad(0.86,-0.25,0.10,0.09); rad(0.86,0.16,0.10,0.09);
+  }
+  else if(typ==='AMEISE'){
+    gabel(0.90,0.21,0.12);
+    ctx.fillStyle=F.col;                                  // Batteriekasten
+    ctx.fillRect(-u*0.34,-u*0.30,u*0.48,u*0.60);
+    ctx.fillStyle='rgba(255,255,255,.16)';
+    ctx.fillRect(-u*0.34,-u*0.30,u*0.48,u*0.16);
+    ctx.fillStyle=dunkel;                                 // Lüftungsschlitze
+    ctx.fillRect(-u*0.26,-u*0.10,u*0.30,u*0.05);
+    ctx.fillRect(-u*0.26, u*0.02,u*0.30,u*0.05);
+    ctx.fillStyle=stahl;                                  // lange Deichsel
+    ctx.fillRect(-u*0.72,-u*0.05,u*0.40,u*0.10);
+    ctx.fillStyle=F.col;
+    ctx.fillRect(-u*0.82,-u*0.17,u*0.12,u*0.34);          // Deichselkopf
+    rad(-0.30,-0.37,0.14,0.10); rad(-0.30,0.27,0.14,0.10);
+    rad(0.90,-0.26,0.10,0.09);  rad(0.90,0.17,0.10,0.09);
+  }
+  else if(typ==='KOMMI'){
+    gabel(0.94,0.22,0.12);
+    ctx.fillStyle=F.col;                                  // Antriebsteil
+    ctx.fillRect(-u*0.30,-u*0.32,u*0.42,u*0.64);
+    ctx.fillStyle='rgba(20,26,32,.55)';                   // Trittplattform
+    ctx.fillRect(-u*0.62,-u*0.26,u*0.32,u*0.52);
+    ctx.strokeStyle='rgba(232,185,35,.75)'; ctx.lineWidth=1.2;
+    ctx.strokeRect(-u*0.62,-u*0.26,u*0.32,u*0.52);
+    ctx.fillStyle=stahl;                                  // Lenkbügel
+    ctx.fillRect(-u*0.34,-u*0.40,u*0.07,u*0.80);
+    rad(0.94,-0.27,0.10,0.09); rad(0.94,0.18,0.10,0.09);
+  }
+  else {                                                  // STAPLER
+    gabel(1.02,0.23,0.13);
+    ctx.fillStyle=dunkel;                                 // Hubmast, zwei Schienen
+    ctx.fillRect(u*0.04,-u*0.34,u*0.07,u*0.68);
+    ctx.fillRect(u*0.15,-u*0.30,u*0.05,u*0.60);
+    ctx.fillStyle=F.col;                                  // Fahrerhaus
+    ctx.fillRect(-u*0.40,-u*0.34,u*0.44,u*0.68);
+    ctx.fillStyle='#2A3138';                              // Gegengewicht
+    ctx.fillRect(-u*0.70,-u*0.30,u*0.30,u*0.60);
+    ctx.fillStyle='rgba(255,255,255,.14)';
+    ctx.fillRect(-u*0.40,-u*0.34,u*0.44,u*0.16);
+    ctx.strokeStyle='rgba(20,26,32,.85)'; ctx.lineWidth=1.6;
+    ctx.strokeRect(-u*0.62,-u*0.32,u*0.60,u*0.64);        // Schutzdach
+    rad(-0.60,-0.40,0.16,0.11); rad(-0.60,0.29,0.16,0.11);
+    rad(-0.06,-0.38,0.14,0.10); rad(-0.06,0.28,0.14,0.10);
+  }
+  ctx.restore();
+
+  // Akkubalken bleibt bildschirmparallel, damit er lesbar ist
+  if(akku!==undefined && FFZ_TYPES[typ].akkuV>0 && TS>11){
+    const bw=u*0.62;
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(cx-bw/2,cy+u*0.40,bw,2.5);
+    ctx.fillStyle=akku<0.15?'#C4453B':(akku<0.35?'#E8B923':'#5FA35A');
+    ctx.fillRect(cx-bw/2,cy+u*0.40,bw*akku,2.5);
+    ctx.globalAlpha=1;
+  }
+  ctx.globalAlpha=1;
+}
+
+/* ── LKW-Bewegung: Wegpunkte mit Zielwinkel, rückwärts langsamer ── */
+function newVis(side){
+  const x = side<0 ? -YARD-8 : -YARD-8;
+  return {x, y:ROAD_Y, ang:0, px:x, py:ROAD_Y, pang:0, wp:[], done:true};
+}
+const wrapAng=a=>((a+540)%360)-180;
+function stepVis(v){
+  v.px=v.x; v.py=v.y; v.pang=v.ang;
+  if(!v.wp.length){ v.done=true; return; }
+  const w=v.wp[0];
+  const dx=w.x-v.x, dy=w.y-v.y, d=Math.hypot(dx,dy);
+  const sp=w.rev?0.14:0.5;
+  const diff=wrapAng(w.ang-v.ang);
+  v.ang += Math.max(-7,Math.min(7,diff));
+  // Erst ausrichten, dann anfahren — verhindert Driften durch die Kurve
+  if(Math.abs(diff)>50 && !w.rev){ return; }
+  if(d<=sp){ v.x=w.x; v.y=w.y; v.wp.shift(); if(!v.wp.length)v.done=true; }
+  else { v.x+=dx/d*sp; v.y+=dy/d*sp; }
+}
+const QUEUE_X = s=> s<0 ? -YARD+1.5 : GW+YARD-1.5;
+const LANE_X  = s=> s<0 ? -6.6 : GW+6.6;
+const DOCK_X  = s=> s<0 ? -3.3 : GW+3.3;
+const queueY  = i=> 20 - i*6.8;
+
+/* ── Sattelzug: eingebackenes Sprite aus dem Renderbild (Draufsicht,
+      560×159, Zugmaschine links). Anker ist die Fahrzeugmitte, Winkel in Grad.
+      Gezeichnet wird um 180° gedreht statt gespiegelt, damit die
+      Beschriftung auf der Plane lesbar bleibt. ── */
+const LKW_IMG = new Image();
+LKW_IMG.src = 'data:image/png;base64,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';
+const LKW_RATIO = 159/560;
+
+function drawLKW(px,py,angDeg,warn,label,labelCol){
+  const u=TS, L=6*u, Hh=L*LKW_RATIO;
+  const ang=angDeg*Math.PI/180;
+  const cx=px*u, cy=py*u;
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(ang);
+  ctx.fillStyle='rgba(0,0,0,.34)';                 // Bodenschatten
+  ctx.fillRect(-L/2+u*0.10,-Hh/2+u*0.14,L,Hh);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(ang+Math.PI);
+  if(LKW_IMG.complete && LKW_IMG.naturalWidth){
+    ctx.drawImage(LKW_IMG,-L/2,-Hh/2,L,Hh);
+  } else {
+    ctx.fillStyle='#7A5140'; ctx.fillRect(-L/2,-Hh/2,L,Hh);
+  }
+  ctx.restore();
+
+  if(warn){                                        // überfällig am Tor
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
+    ctx.strokeStyle='rgba(196,69,59,.92)'; ctx.lineWidth=Math.max(1.5,u*0.08);
+    ctx.strokeRect(-L/2,-Hh/2,L,Hh);
+    ctx.restore();
+    if(Math.floor(tick/2)%2===0){
+      ctx.fillStyle='#C4453B';
+      ctx.beginPath(); ctx.arc(cx-Math.cos(ang)*L*0.42,cy-Math.sin(ang)*L*0.42,u*0.20,0,7); ctx.fill();
+    }
+  }
+
+  if(label && u>9){
+    ctx.font=`600 ${Math.max(9,u*0.55)}px 'IBM Plex Mono'`;
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    const ty=cy-Hh/2-u*0.18;
+    ctx.fillStyle='rgba(16,19,23,.78)';
+    ctx.fillRect(cx-u*0.62,ty-u*0.72,u*1.24,u*0.76);
+    ctx.fillStyle=labelCol||'#E8B923';
+    ctx.fillText(label,cx,ty-u*0.06);
+    ctx.textAlign='left'; ctx.textBaseline='top';
+  }
+}
+
+function drawLKWvis(tr,alpha,warn,label,col){
+  const v=tr.vis; if(!v)return;
+  const ix=v.px+(v.x-v.px)*alpha, iy=v.py+(v.y-v.py)*alpha;
+  const ia=v.pang+wrapAng(v.ang-v.pang)*alpha;
+  drawLKW(ix,iy,ia,warn,label,col);
+}
+
+function render(alpha){
+  OX=OX0+panX; OY=OY0+panY;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const W=cv.width/DPR, H=cv.height/DPR;
+  ctx.fillStyle='#101317'; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.translate(OX,OY);
+
+  const nacht = shiftOf(tick)===2;
+
+  // ── Ebene 0: Firmengelände — Hof, Zufahrt, Zaun, Pforte
+  const X0=-YARD*TS, X1=(GW+YARD)*TS, Y1=(GH+YB)*TS;
+  ctx.fillStyle = nacht?'#1E2226':'#262B2F';                  // Hoffläche
+  ctx.fillRect(X0,0,X1-X0,Y1);
+  ctx.fillStyle = nacht?'#24282C':'#2E3438';                  // Asphaltierte Fahrgasse
+  ctx.fillRect(X0,(ROAD_Y-1.6)*TS,X1-X0,3.2*TS);
+  ctx.strokeStyle='rgba(232,185,35,.35)'; ctx.lineWidth=1.5;  // Mittelstreifen
+  ctx.setLineDash([TS*0.8,TS*0.7]);
+  ctx.beginPath(); ctx.moveTo(X0,ROAD_Y*TS); ctx.lineTo(X1,ROAD_Y*TS); ctx.stroke();
+  ctx.setLineDash([]);
+  // Rangierflächen vor den Toren
+  ctx.fillStyle = nacht?'#23272B':'#2C3236';
+  ctx.fillRect(-YARD*TS,0,YARD*TS,(ROAD_Y-1.6)*TS);
+  ctx.fillRect(GW*TS,0,YARD*TS,(ROAD_Y-1.6)*TS);
+  // Wartespuren markieren
+  ctx.strokeStyle='rgba(232,185,35,.13)'; ctx.lineWidth=1;
+  [QUEUE_X(-1),QUEUE_X(1)].forEach(qx=>{
+    ctx.beginPath(); ctx.moveTo((qx-0.9)*TS,2*TS); ctx.lineTo((qx-0.9)*TS,(ROAD_Y-2)*TS);
+    ctx.moveTo((qx+0.9)*TS,2*TS); ctx.lineTo((qx+0.9)*TS,(ROAD_Y-2)*TS); ctx.stroke();
+  });
+
+  // Zaun mit Ein- und Ausfahrt
+  ctx.strokeStyle='rgba(150,162,174,.45)'; ctx.lineWidth=2;
+  ctx.setLineDash([TS*0.28,TS*0.22]);
+  ctx.beginPath();
+  ctx.moveTo(X0,1); ctx.lineTo(X1,1);
+  ctx.moveTo(X0,Y1-1); ctx.lineTo(X1,Y1-1);
+  ctx.moveTo(X0+1,0); ctx.lineTo(X0+1,(ROAD_Y-1.9)*TS);
+  ctx.moveTo(X0+1,(ROAD_Y+1.9)*TS); ctx.lineTo(X0+1,Y1);
+  ctx.moveTo(X1-1,0); ctx.lineTo(X1-1,(ROAD_Y-1.9)*TS);
+  ctx.moveTo(X1-1,(ROAD_Y+1.9)*TS); ctx.lineTo(X1-1,Y1);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Pförtnerhaus + Schranke an der Einfahrt
+  ctx.fillStyle='#3A424A'; ctx.fillRect(X0+TS*0.3,(ROAD_Y+2.1)*TS,TS*1.6,TS*1.3);
+  ctx.fillStyle='#4E5862'; ctx.fillRect(X0+TS*0.45,(ROAD_Y+2.25)*TS,TS*1.3,TS*0.5);
+  ctx.strokeStyle='#E8B923'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(X0+TS*1.1,(ROAD_Y+2.1)*TS); ctx.lineTo(X0+TS*1.1,(ROAD_Y+1.7)*TS); ctx.stroke();
+  ctx.fillStyle='rgba(230,235,240,.30)';
+  ctx.font=`600 ${Math.max(8,TS*0.5)}px 'Barlow Condensed'`;
+  ctx.fillText('EINFAHRT',X0+TS*0.35,(ROAD_Y+3.55)*TS);
+  ctx.fillText('AUSFAHRT',X1-TS*3.3,(ROAD_Y+3.55)*TS);
+
+  const drawDock=(side,door,idx,label)=>{
+    const x0 = side<0 ? -TS*3.2 : GW*TS+TS*0.2;
+    const y0 = (door.y-1.4)*TS;
+    ctx.fillStyle = nacht?'#343A40':'#3D444A';
+    ctx.fillRect(x0, y0, TS*3, TS*2.8);                       // Rampenschürze
+    ctx.strokeStyle='#E8B923'; ctx.lineWidth=2;               // Einweisungsstreifen
+    ctx.beginPath();
+    ctx.moveTo(side<0?x0:x0+TS*3, y0+2); ctx.lineTo(side<0?x0+TS*3:x0, y0+2);
+    ctx.moveTo(side<0?x0:x0+TS*3, y0+TS*2.8-2); ctx.lineTo(side<0?x0+TS*3:x0, y0+TS*2.8-2);
+    ctx.stroke();
+    ctx.fillStyle='#E8B923';                                   // Torschild
+    ctx.font=`700 ${Math.max(9,TS*0.62)}px 'Barlow Condensed'`;
+    ctx.textBaseline='middle';
+    ctx.fillText(label, side<0 ? x0+TS*3.25 : x0-TS*1.9, y0+TS*1.4);
+    ctx.textBaseline='top';
+  };
+  DOORS_IN.forEach((d,i)=>drawDock(-1,d,i,`WE ${i+1}`));
+  DOORS_OUT.forEach((d,i)=>drawDock(1,d,i,`WA ${i+1}`));
+  ctx.fillStyle='rgba(230,235,240,.22)';
+  ctx.font=`600 ${Math.max(8,TS*0.55)}px 'Barlow Condensed'`;
+  ctx.fillText('HOF · ANLIEFERUNG', -YARD*TS+TS*0.3, TS*0.4);
+  ctx.fillText('HOF · ABHOLUNG', GW*TS+TS*0.3, TS*0.4);
+
+  // ── Ebene 1: Boden & Zonen
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+    const c=grid[y][x], px=x*TS, py=y*TS;
+    if(c.t===WALL){ ctx.fillStyle='#2A3138'; ctx.fillRect(px,py,TS,TS); continue; }
+    if(c.t===DOOR_IN||c.t===DOOR_OUT){ ctx.fillStyle='#3E4750'; ctx.fillRect(px,py,TS,TS); continue; }
+    let f = nacht?'#33373A':'#3E4347';
+    if(c.zone==='WE')    f = nacht?'#35393A':'#43483F';
+    if(c.zone==='PACK')  f = nacht?'#37363E':'#464150';
+    if(c.zone==='WA')    f = nacht?'#33393A':'#3E4A45';
+    if(c.zone==='SPERR') f = nacht?'#3B3234':'#4A3A3A';
+    if(c.zone==='PAUSE') f = nacht?'#36383B':'#454A4E';
+    if(c.zone==='LADE')  f = nacht?'#31383C':'#3C474C';
+    if(c.zone==='BUERO') f = nacht?'#34373C':'#42464C';
+    if(c.t===RACK) f='#343A40';
+    if(c.fahrweg)  f = nacht?'#2F343A':'#39404A';
+    if(c.nurFuss)  f = nacht?'#343B33':'#414C3C';
+    ctx.fillStyle=f; ctx.fillRect(px,py,TS,TS);
+  }
+
+  // ── Fahrweg: Begrenzungslinien, Richtungspfeile, Fußgängerüberwege
+  ctx.lineWidth=Math.max(1.5,TS*0.10);
+  ctx.strokeStyle='#E8B923';
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+    const c=grid[y][x]; if(!c.fahrweg)continue;
+    const px=x*TS, py=y*TS, o=ctx.lineWidth/2;
+    const nb=(dx,dy)=>{const n=grid[y+dy]&&grid[y+dy][x+dx];return n&&n.fahrweg};
+    ctx.beginPath();
+    if(!nb(0,-1)&&!c.cross){ ctx.moveTo(px,py+o); ctx.lineTo(px+TS,py+o); }
+    if(!nb(0, 1)&&!c.cross){ ctx.moveTo(px,py+TS-o); ctx.lineTo(px+TS,py+TS-o); }
+    if(!nb(-1,0)&&!c.cross){ ctx.moveTo(px+o,py); ctx.lineTo(px+o,py+TS); }
+    if(!nb( 1,0)&&!c.cross){ ctx.moveTo(px+TS-o,py); ctx.lineTo(px+TS-o,py+TS); }
+    ctx.stroke();
+    if(c.cross){                                   // Zebrastreifen
+      const quer = nb(-1,0)||nb(1,0);
+      ctx.fillStyle='rgba(236,240,244,.62)';
+      for(let i=0;i<4;i++){
+        if(quer) ctx.fillRect(px+2, py+i*TS/4+1, TS-4, TS/4-2.5);
+        else     ctx.fillRect(px+i*TS/4+1, py+2, TS/4-2.5, TS-4);
+      }
+    } else if((x+y)%7===0){                        // Richtungspfeil
+      ctx.fillStyle='rgba(232,185,35,.34)';
+      const senk = nb(0,-1)||nb(0,1);
+      ctx.beginPath();
+      if(senk){ ctx.moveTo(px+TS/2,py+TS*0.28); ctx.lineTo(px+TS*0.72,py+TS*0.62);
+                ctx.lineTo(px+TS*0.28,py+TS*0.62); }
+      else    { ctx.moveTo(px+TS*0.72,py+TS/2); ctx.lineTo(px+TS*0.38,py+TS*0.28);
+                ctx.lineTo(px+TS*0.38,py+TS*0.72); }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // ── Fußgängerzone: Schraffur quer zum Gang
+  ctx.strokeStyle='rgba(160,200,150,.28)'; ctx.lineWidth=1;
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+    if(!grid[y][x].nurFuss)continue;
+    const px=x*TS, py=y*TS;
+    ctx.beginPath();
+    for(let i=0;i<TS;i+=Math.max(4,TS*0.28)){ ctx.moveTo(px+i,py+TS); ctx.lineTo(px+i+TS,py); }
+    ctx.stroke();
+  }
+
+  // ── Absperrband: schwarz-gelbe Bereichsmarkierung
+  const TAPE=['WE','PACK','WA','SPERR','LADE','PAUSE','BUERO','UMPACK','KEP'];
+  const tw=Math.max(2.5,TS*0.17);
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+    const z=grid[y][x].zone;
+    if(!z||!TAPE.includes(z))continue;
+    const px=x*TS, py=y*TS;
+    const other=(dx,dy)=>{
+      const n=grid[y+dy]&&grid[y+dy][x+dx];
+      return !n || n.zone!==z;
+    };
+    if(other(0,-1)) hazard(px,py,TS,tw,true);
+    if(other(0, 1)) hazard(px,py+TS-tw,TS,tw,true);
+    if(other(-1,0)) hazard(px,py,tw,TS,false);
+    if(other( 1,0)) hazard(px+TS-tw,py,tw,TS,false);
+  }
+
+  // Zonenlabels
+  ctx.font=`600 ${Math.max(8,TS*0.52)}px 'Barlow Condensed'`;
+  ctx.fillStyle='rgba(230,235,240,.26)'; ctx.textBaseline='top';
+  const labels=[['WARENEINGANG',2,1.4],['SPERRBEREICH',2,20.4],['PAUSENRAUM',8,20.1],
+                ['LADESTATION FFZ',14,19.15],['KLEINTEILELAGER · ZU FUSS',26,19.15],['UMPACKPLATZ',33,19.15],['KEP-BEREITSTELLUNG',35,16.15],
+                ['PACKEREI',29,2.6],['WARENAUSGANG',35,1.4],['BÜRO',36,18.6],['FAHRWEG',29,17.2],['LAGER',9,1.4]];
+  for(const [tx,x,y] of labels) ctx.fillText(tx,x*TS,y*TS);
+
+  // ── Ebene 2: Hochregale — Rahmenstiele, Traversen, Fachebenen
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
+    const c=grid[y][x]; if(c.t!==RACK||!c.bins)continue;
+    const px=x*TS, py=y*TS;
+    const fach = c.zone==='FACH';
+    const acc=c.bins[0].acc;
+    const ax=Math.sign(acc.x-x), ay=Math.sign(acc.y-y);   // Richtung zur Bediengasse
+    const quer = ax!==0;                                   // Fächer nebeneinander?
+
+    // Schlagschatten in die Gasse — gibt dem Regal Höhe
+    ctx.fillStyle='rgba(8,11,14,.34)';
+    if(ax) ctx.fillRect(px+(ax>0?TS:-TS*0.34), py+1.5, TS*0.34, TS);
+    else   ctx.fillRect(px+1.5, py+(ay>0?TS:-TS*0.30), TS, TS*0.30);
+
+    // Korpus / Stahlbau
+    ctx.fillStyle=fach?'#2C2416':'#1C232A';
+    ctx.fillRect(px,py,TS,TS);
+
+    // Rahmenstiele: die tragenden Ständer, quer zur Gasse
+    const post=Math.max(1.8,TS*0.155);
+    ctx.fillStyle=fach?'#8A6733':'#2E6F9E';
+    if(quer){ ctx.fillRect(px,py,TS,post); ctx.fillRect(px,py+TS-post,TS,post); }
+    else    { ctx.fillRect(px,py,post,TS); ctx.fillRect(px+TS-post,py,post,TS); }
+    ctx.fillStyle='rgba(255,255,255,.16)';                 // Kantenlicht oben
+    if(quer) ctx.fillRect(px,py,TS,Math.max(1,post*0.32));
+    else     ctx.fillRect(px,py,Math.max(1,post*0.32),TS);
+
+    // Fachebenen 1–3
+    const inner = TS-2*post;
+    const step  = inner/3;
+    c.bins.forEach((b,i)=>{
+      const off = post + i*step + 0.6;
+      const fx = quer ? px+post+0.8        : px+off;
+      const fy = quer ? py+post+0.6+i*step : py+post+0.8;
+      const fw = quer ? TS-2*post-1.6      : step-1.2;
+      const fh = quer ? step-1.2           : TS-2*post-1.6;
+      if(b.hu&&b.hu!=='RES'){
+        const abw = b.hu.buchBin&&b.hu.bin&&b.hu.buchBin!==b.hu.bin.id&&show.buch;
+        drawHU(b.hu,fx,fy,fw,fh,{rand:abw?'#C4453B':null});
+      } else {
+        ctx.fillStyle=`rgba(12,16,20,${0.50-i*0.09})`;     // tiefere Ebene = dunkler
+        ctx.fillRect(fx,fy,fw,fh);
+      }
+    });
+
+    // Traversen: Auflagebalken auf der Gassenseite
+    const beam=Math.max(1.4,TS*0.11);
+    ctx.fillStyle=fach?'#B0873F':'#D9722B';
+    if(ax>0)      ctx.fillRect(px+TS-beam,py+post*0.4,beam,TS-post*0.8);
+    else if(ax<0) ctx.fillRect(px,py+post*0.4,beam,TS-post*0.8);
+    else if(ay>0) ctx.fillRect(px+post*0.4,py+TS-beam,TS-post*0.8,beam);
+    else          ctx.fillRect(px+post*0.4,py,TS-post*0.8,beam);
+
+    if(show.binids&&TS>13){
+      ctx.fillStyle='rgba(255,255,255,.42)';
+      ctx.font=`400 ${TS*0.3}px 'IBM Plex Mono'`;
+      ctx.fillText(String(y).padStart(2,'0'),px+post+1,py+post+0.5);
+    }
+  }
+
+  // Regalzeilen-Kennung am Gassenkopf
+  if(TS>10){
+    ctx.font=`700 ${Math.max(8,TS*0.52)}px 'Barlow Condensed'`;
+    ctx.fillStyle='rgba(232,185,35,.45)'; ctx.textAlign='center';
+    RACK_COLS.forEach(([a,b],i)=>{
+      ctx.fillText(String(i*2+1).padStart(2,'0'), a*TS+TS/2, 2.2*TS);
+      ctx.fillText(String(i*2+2).padStart(2,'0'), b*TS+TS/2, 2.2*TS);
+    });
+    ctx.textAlign='left';
+  }
+
+  // ── Ebene 2b: HUs auf Bodenplätzen
+  for(const hu of S.hus.values()){
+    if(hu.loc!=='SLOT')continue;
+    const px=hu.x*TS+1.5, py=hu.y*TS+1.5, sz=TS-3;
+    drawHU(hu,px,py,sz,sz,{rand:hu.status==='versandbereit'?'#5FA35A':null});
+    if(hu.status==='beschädigt'||hu.status==='gesperrt'){
+      ctx.strokeStyle='#C4453B'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+s,py+s);
+      ctx.moveTo(px+s,py); ctx.lineTo(px,py+s); ctx.stroke();
+    }
+  }
+
+  // ── Packplätze: Tisch, Zuführmarkierung, Rollwagenfeld
+  for(const pp of PACKPLAETZE){
+    const tx=pp.tisch.x*TS, ty=pp.tisch.y*TS;
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(tx+2.5,ty+2.5,TS-4,TS-4);
+    ctx.fillStyle='#5B6470'; ctx.fillRect(tx+1.5,ty+1.5,TS-3,TS-3);       // Packtisch
+    ctx.fillStyle='#7B8694'; ctx.fillRect(tx+1.5,ty+1.5,TS-3,(TS-3)*0.22);
+    ctx.fillStyle='#C9843F'; ctx.fillRect(tx+TS*0.18,ty+TS*0.42,TS*0.26,TS*0.26); // Kartonstapel
+    ctx.fillStyle='#3A424A'; ctx.fillRect(tx+TS*0.58,ty+TS*0.46,TS*0.22,TS*0.18); // Klebeband
+    ctx.strokeStyle='rgba(232,185,35,.5)'; ctx.lineWidth=1;               // Zuführfeld
+    ctx.strokeRect(pp.feed.x*TS+1.5,pp.feed.y*TS+1.5,TS-3,TS-3);
+    ctx.setLineDash([3,3]); ctx.strokeStyle='rgba(200,210,220,.35)';
+    ctx.strokeRect(pp.stell.x*TS+1.5,pp.stell.y*TS+1.5,TS-3,TS-3);        // Rollwagenfeld
+    ctx.setLineDash([]);
+    if(pp.wagen) drawRollwagen(pp.stell.x,pp.stell.y,pp.wagen,0.86);
+  }
+  for(const rw of S.wagen){
+    if(rw.status==='bereit') drawRollwagen(rw.x,rw.y,rw,0.86);
+  }
+  if(S.kep){
+    const v=S.kep.vis;
+    const ix=v.px+(v.x-v.px)*alpha, iy=v.py+(v.y-v.py)*alpha;
+    const ia=v.pang+wrapAng(v.ang-v.pang)*alpha;
+    drawKEP(ix,iy,ia);
+  }
+
+  // ── Ebene 2c: Geparkte Flurförderzeuge
+  for(const v of S.ffz){
+    if(v.worker)continue;
+    drawFFZ(v.x,v.y,v.typ,0.8,v.akku,v.dir);
+  }
+
+  // ── LKW auf dem Gelände
+  S.hofIn.forEach(tr=>drawLKWvis(tr,alpha,tick-tr.ankunft>TICKS_PER_H,'',''));
+  S.trucksIn.forEach(tr=>{
+    if(!tr)return;
+    const rest=tr.hus.filter(id=>{const h=S.hus.get(id);return h&&h.status==='aufLKW'}).length;
+    drawLKWvis(tr,alpha,tick-tr.ankunft>TICKS_PER_H, tr.docked?`${rest}`:'', '#E8B923');
+  });
+  S.trucksOut.forEach(tr=>{
+    if(!tr)return;
+    drawLKWvis(tr,alpha,false, tr.docked?`${tr.geladen}/${tr.soll}`:'', '#5FA35A');
+  });
+
+  // ── Overlay: Buchungsabgleich
+  if(show.buch){
+    ctx.strokeStyle='rgba(196,69,59,.55)'; ctx.lineWidth=1;
+    for(const hu of S.hus.values()){
+      if(!hu.bin||!hu.buchBin||hu.buchBin===hu.bin.id)continue;
+      const soll=bins.find(b=>b.id===hu.buchBin); if(!soll)continue;
+      ctx.beginPath();
+      ctx.moveTo(hu.bin.x*TS+TS/2,hu.bin.y*TS+TS/2);
+      ctx.lineTo(soll.x*TS+TS/2,soll.y*TS+TS/2);
+      ctx.stroke();
+    }
+  }
+
+  // ── Overlay: Task-Wege
+  if(show.tasks){
+    for(const w of S.workers){
+      if(!onShift(w)||!w.path||!w.path.length)continue;
+      ctx.strokeStyle=w.task?(TYPES[w.task.typ].col+'80'):'rgba(140,150,160,.3)';
+      ctx.lineWidth=1.5; ctx.beginPath();
+      ctx.moveTo(w.x*TS+TS/2,w.y*TS+TS/2);
+      for(const p of w.path) ctx.lineTo(p.x*TS+TS/2,p.y*TS+TS/2);
+      ctx.stroke();
+    }
+  }
+
+  // ── Ebene 3: Mitarbeiter
+  for(const w of S.workers){
+    if(!onShift(w))continue;
+    const ix=w.px+(w.x-w.px)*alpha, iy=w.py+(w.y-w.py)*alpha;
+    const cx=ix*TS+TS/2, cy=iy*TS+TS/2, r=TS*0.30;
+
+    if(w.ffz) drawFFZ(ix,iy,w.ffz.typ,1,w.ffz.akku,w.dir);
+
+    if(w.carryWagen) drawRollwagen(ix,iy-0.75,w.carryWagen,0.8);
+    if(w.carry){
+      const hu=S.hus.get(w.carry);
+      if(hu){
+        if(w.ffz){                                  // auf den Gabeln, mitdrehend
+          const reich = TS*(w.ffz.typ==='STAPLER'?0.80:0.72);
+          const gx=cx+Math.cos(w.dir||0)*reich, gy=cy+Math.sin(w.dir||0)*reich;
+          const sz=TS*(hu.art==='KLT'?0.46:0.78);
+          ctx.save(); ctx.translate(gx,gy); ctx.rotate(w.dir||0);
+          ctx.fillStyle='rgba(0,0,0,.34)';
+          ctx.fillRect(-sz/2+1.5,-sz/2+1.5,sz,sz);
+          drawHU(hu,-sz/2,-sz/2,sz,sz);
+          ctx.restore();
+        } else {
+          drawHU(hu, cx-r*1.05, cy-r*2.45, r*2.1, r*1.6);
+        }
+      }
+    }
+    drawWorker(cx,cy,w,r);
+    if(w.task&&TS>11){                            // Marker für den laufenden Task
+      ctx.fillStyle='rgba(16,19,23,.65)';
+      ctx.beginPath(); ctx.arc(cx,cy-r*1.65,r*0.42,0,7); ctx.fill();
+      ctx.fillStyle=TYPES[w.task.typ].col;
+      ctx.beginPath(); ctx.arc(cx,cy-r*1.65,r*0.30,0,7); ctx.fill();
+    }
+    if(w.phase&&w.phase!=='weg'&&w.phase!=='frei'&&w.ptMax){
+      const p=w.pt/w.ptMax;
+      ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(cx-r,cy+r*1.25,r*2,2.5);
+      ctx.fillStyle='#E8B923'; ctx.fillRect(cx-r,cy+r*1.25,r*2*p,2.5);
+    }
+    if(S.sel&&S.sel.kind==='w'&&S.sel.id===w.id){
+      ctx.strokeStyle='#FFF'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(cx,cy,r*1.8,0,7); ctx.stroke();
+    }
+  }
+
+  // Nachtstimmung
+  if(nacht){
+    ctx.fillStyle='rgba(18,26,44,.30)'; ctx.fillRect(0,0,GW*TS,GH*TS);
+  }
+  ctx.restore();
+}
+
+/* ══════════════════════════════════════════════════════════
+   11 · HUD
+   ══════════════════════════════════════════════════════════ */
+const $=id=>document.getElementById(id);
+function fmt(n){return n.toLocaleString('de-DE')}
+
+function updateHUD(){
+  const c=clockOf(tick);
+  $('clock').textContent=`Tag ${c.d} · ${String(c.h).padStart(2,'0')}:${String(c.m).padStart(2,'0')}`;
+  const sh=shiftOf(tick);
+  $('shift').textContent=SHIFTNAMES[sh];
+  $('shift').style.borderColor = sh===2?'#4A5875':'#323C46';
+  $('kasse').textContent=fmt(S.kasse)+' €';
+
+  const belegt=bins.filter(b=>b.hu&&b.hu!=='RES').length;
+  const aktiv=S.workers.filter(onShift);
+  const busy=aktiv.filter(w=>w.task).length;
+  const fehl=[...S.hus.values()].filter(h=>h.bin&&h.buchBin&&h.buchBin!==h.bin.id).length;
+  const eingel=[...S.hus.values()].filter(h=>h.loc==='BIN').length;
+  const genau = eingel? (1-fehl/eingel)*100 : 100;
+  const term = S.stat.gesamt? S.stat.pünktlich/S.stat.gesamt*100 : 100;
+  const leistung = Math.round(S.stat.doneWin.length/4);
+
+  const cls=(v,g,w2)=> v>=g?'good':(v>=w2?'warn':'bad');
+  $('kpis').innerHTML=[
+    ['Termintreue',term.toFixed(0)+'%',cls(term,95,85)],
+    ['Bestandsgenauigkeit',genau.toFixed(1)+'%',cls(genau,99,96)],
+    ['Auslastung Plätze',(belegt/bins.length*100).toFixed(0)+'%',S.annahmestopp?'bad':(belegt/bins.length>0.85?'warn':'')],
+    ['Tasks / Stunde',leistung,''],
+    ['Personal aktiv',`${busy}/${aktiv.length}`,''],
+    ['Bruch gesamt',S.stat.bruch,S.stat.bruch>4?'warn':''],
+    ['Ruf beim Kunden',Math.round(S.ruf),cls(S.ruf,70,45)],
+  ].map(([l,v,k])=>`<div class="kpi"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  const counts={};
+  for(const t of S.tasks) counts[t.typ]=(counts[t.typ]||0)+1;
+  const tot=S.tasks.length;
+  $('qtot').textContent=tot;
+  $('queue').innerHTML=Object.keys(TYPES).map(k=>{
+    const n=counts[k]||0;
+    return `<div class="qrow"><span>${TYPES[k].lbl}</span><span class="n">${n}</span></div>
+            <div class="bar"><i style="width:${tot?n/tot*100:0}%;background:${TYPES[k].col}"></i></div>`;
+  }).join('');
+
+  const hh=t=>{const q=clockOf(t);return `${String(q.h).padStart(2,'0')}:${String(q.m).padStart(2,'0')}`};
+  let hof='';
+  S.trucksIn.forEach((tr,i)=>{
+    if(!tr){ hof+=`<div><span style="color:var(--muted)">WE ${i+1}</span> &nbsp;frei</div>`; return; }
+    const rest=tr.hus.filter(id=>{const h=S.hus.get(id);return h&&h.status==='aufLKW'}).length;
+    const spät=tick-tr.ankunft>TICKS_PER_H;
+    hof+=`<div><span style="color:var(--muted)">WE ${i+1}</span> &nbsp;${tr.lieferant} · <span style="color:${spät?'#C4453B':'inherit'}">${rest} Pal.</span></div>`;
+  });
+  S.trucksOut.forEach((tr,i)=>{
+    hof+= tr
+      ? `<div><span style="color:var(--muted)">WA ${i+1}</span> &nbsp;${tr.order} · ${tr.geladen}/${tr.soll}</div>`
+      : `<div><span style="color:var(--muted)">WA ${i+1}</span> &nbsp;frei</div>`;
+  });
+  if(S.hofIn.length) hof+=`<div style="color:var(--sig-yellow)">↳ ${S.hofIn.length} LKW warten im Hof</div>`;
+  if(S.hofOut.length) hof+=`<div style="color:var(--sig-yellow)">↳ ${S.hofOut.length} Auftrag/Aufträge warten auf Tor</div>`;
+  S.avise.slice(0,3).forEach(a=>{
+    hof+=`<div style="color:var(--muted)">Avis ${hh(a.ankunftGeplant)} · ${a.lieferant} · ${a.n} Pal.</div>`;
+  });
+  $('hof').innerHTML=hof;
+  $('hofcount').textContent=S.hofIn.length+S.hofOut.length;
+
+  // ── Kundenaufträge im Eingang: prüfen, Termin vereinbaren, annehmen
+  const uhr=t=>{const q=clockOf(t);return `${String(q.h).padStart(2,'0')}:${String(q.m).padStart(2,'0')}`};
+  $('anfcount').textContent=S.anfragen.length;
+  $('anfragen').innerHTML = S.anfragen.map(a=>{
+    const fehlt=pruefeAnfrage(a);
+    const posTxt = a.kanal==='KEP'
+      ? `${a.pakete} Pakete ${a.sku}`
+      : a.positionen.map(pz=>`${pz.anzahl}× ${pz.sku} ${pz.art==='KLT'?'Stk':'Pal'}`).join(' · ');
+    const rest=Math.max(0,a.ablauf-tick);
+    return `<div class="anf ${a.eilig?'eil':(fehlt?'':'ok')}">
+      <div class="k"><span>${a.kunde}</span><span style="color:var(--muted)">${a.id}</span></div>
+      <div class="p">${posTxt}</div>
+      <div class="m">WA-Wunsch ${uhr(a.wunsch)} · ${fmt(a.erloes)} € · Pönale ${fmt(a.strafe)} €
+        ${a.eilig?' · <span class="fehl">EILIG</span>':''}</div>
+      <div class="m">${fehlt?`<span class="fehl">${fehlt} Einheiten fehlen</span>`:'Bestand geprüft · verfügbar'}
+        · Antwort in ${Math.ceil(rest*MIN_PER_TICK)} min</div>
+      <div class="b">
+        <button class="ja" data-ok="${a.id}">Termin bestätigen</button>
+        <button data-spaet="${a.id}">Später (−15 %)</button>
+        <button class="nein" data-no="${a.id}">Ablehnen</button>
+      </div></div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:12px">Kein Auftragseingang.</div>';
+
+  // ── Versand & Lager: Beleglauf KA → LF → LA
+  const wartetVersand=S.orders.filter(o=>o.status==='angenommen');
+  const lfOffen=S.lieferungen.filter(l=>l.status==='angelegt');
+  const laufend=S.orders.filter(o=>['offen','inArbeit','wartetAufTor','verladen','lieferung'].includes(o.status));
+  $('aufcount').textContent=wartetVersand.length+lfOffen.length+laufend.length;
+
+  let vs='';
+  for(const o of wartetVersand.slice(0,4)){
+    vs+=`<div class="anf ${o.eil?'eil':''}">
+      <div class="k"><span>${o.kunde}</span><span style="color:var(--muted)">${o.id}</span></div>
+      <div class="m">angenommen · WA-Termin ${uhr(o.due)}${o.verschoben?' (verschoben)':''}</div>
+      <div class="b"><button class="frei" data-lf="${o.id}">Lieferung anlegen</button></div>
+    </div>`;
+  }
+  for(const lf of lfOffen.slice(0,4)){
+    vs+=`<div class="anf">
+      <div class="k"><span>${lf.kunde}</span><span style="color:var(--muted)">${lf.id}</span></div>
+      <div class="m">Lieferung angelegt · zu ${lf.ka} · WA ${uhr(lf.termin)}</div>
+      <div class="b"><button class="frei" data-la="${lf.id}">An Lager übergeben</button></div>
+    </div>`;
+  }
+  for(const o of laufend.filter(x=>x.status!=='lieferung').slice(0,5)){
+    const la=S.lageraufteaege.find(x=>x.id===o.la);
+    const rest=S.tasks.filter(t=>t.la===o.la).length;
+    const lbl={offen:'im Lager eingelastet',inArbeit:'Kommissionierung läuft',
+               wartetAufTor:'versandbereit',verladen:'wird verladen'}[o.status]||o.status;
+    vs+=`<div class="anf ${o.eil?'eil':''}">
+      <div class="k"><span>${la?la.id:o.id}</span><span style="color:var(--muted)">${o.lf||''}</span></div>
+      <div class="m">${lbl}${la&&la.soll?` · ${Math.max(0,la.soll-rest)}/${la.soll} Lageraufgaben`:''}
+        · WA ${uhr(o.due)}${tick>o.due?' · <span class="fehl">überfällig</span>':''}</div>
+    </div>`;
+  }
+  $('auftraege').innerHTML = vs || '<div style="color:var(--muted);font-size:12px">Keine laufenden Belege.</div>';
+
+  $('autoAn').classList.toggle('on',S.autoAnnahme);
+  $('autoFr').classList.toggle('on',S.autoVersand);
+
+  // Einsatzplanung: Last je Bereich und Zuteilung der Schicht
+  const shiftSel = (typeof hireShift==='number')?hireShift:0;
+  const lastRows=[]; let unbesetzt=0;
+  for(const k of Object.keys(BEREICHE)){
+    if(k==='ALLE')continue;
+    const typen=BEREICHE[k].typen;
+    const off=S.tasks.filter(t=>typen.includes(t.typ)&&t.state==='offen').length;
+    const ma=S.workers.filter(w=>w.shift===shiftSel&&w.bereich===k).length;
+    const spr=S.workers.filter(w=>w.shift===shiftSel&&w.bereich==='ALLE').length;
+    const kritisch = off>6&&ma===0&&spr===0;
+    if(kritisch)unbesetzt++;
+    lastRows.push(`<tr><td>${BEREICHE[k].lbl}</td>`
+      +`<td class="n ${kritisch?'bad':(off>6?'warn':'')}">${off}</td>`
+      +`<td class="n" style="width:34px;color:var(--muted)">${ma} MA</td></tr>`);
+  }
+  $('planlast').innerHTML=`<tr><td style="color:#5C6670">Bereich</td><td class="n" style="color:#5C6670">offen</td><td class="n" style="color:#5C6670">Team</td></tr>`+lastRows.join('');
+  $('planwarn').textContent = unbesetzt?`${unbesetzt} unbesetzt`:'';
+
+  renderPlan(shiftSel);
+
+  // Fuhrpark
+  let fl='';
+  for(const k of Object.keys(FFZ_TYPES)){
+    const all=S.ffz.filter(v=>v.typ===k);
+    if(!all.length)continue;
+    const belegt=all.filter(v=>v.worker).length;
+    const leer=all.filter(v=>v.akku<0.15).length;
+    fl+=`<div><span style="display:inline-block;width:9px;height:9px;background:${FFZ_TYPES[k].col};margin-right:6px"></span>`
+      + `${FFZ_TYPES[k].lbl} <span style="color:var(--muted)">${belegt}/${all.length}`
+      + ` · ${FFZ_TYPES[k].tempo}${FFZ_TYPES[k].hub?' · Hub':''}`
+      + (leer?` · ${leer} leer`:'')+`</span></div>`;
+  }
+  const wartend=openTasks().length, frei=S.ffz.filter(v=>!v.worker&&v.akku>=0.15).length;
+  if(!frei&&wartend>3) fl+=`<div style="color:var(--sig-yellow)">⚠ Kein Gerät frei · ${wartend} Tasks warten</div>`;
+  $('ffzlist').innerHTML=fl;
+  $('ffzfree').textContent=frei;
+  $('ffzbuy').innerHTML=Object.keys(FFZ_TYPES).map(k=>
+    `<button data-ffz="${k}" ${S.kasse<FFZ_TYPES[k].preis?'disabled':''} title="${FFZ_TYPES[k].lbl} · ${fmt(FFZ_TYPES[k].preis)} €">`
+    +`+${FFZ_TYPES[k].kurz}</button>`).join('');
+
+  $('log').innerHTML=S.log.slice(0,22).map(l=>
+    `<div class="${l.cls||''}"><time>${l.t}</time>${l.msg}</div>`).join('');
+
+  renderInspect();
+}
+
+let planSig='';
+function renderPlan(shiftSel){
+  const el=$('plan');
+  const leute=S.workers.filter(w=>w.shift===shiftSel);
+  const sig=shiftSel+'|'+leute.map(w=>w.id+':'+w.bereich).join(',');
+  // Nicht neu zeichnen, solange der Nutzer im Panel arbeitet — sonst klappt die Auswahl zu
+  const inBenutzung = el.contains(document.activeElement);
+  if(sig!==planSig && !inBenutzung){
+    planSig=sig;
+    const opts=Object.keys(BEREICHE).map(k=>[k,BEREICHE[k].lbl]);
+    el.innerHTML = leute.map(w=>
+        `<div class="prow"><span class="st" data-w="${w.id}"></span>`
+      + `<span class="nm" title="${w.name}">${w.name}${w.skillStapler?' ▲':''}</span>`
+      + `<select data-w="${w.id}">`
+      + opts.map(([k,l])=>`<option value="${k}"${w.bereich===k?' selected':''}>${l}</option>`).join('')
+      + `</select></div>`).join('')
+      || '<div style="color:var(--muted);font-size:12px">Keine Mitarbeiter in dieser Schicht.</div>';
+  }
+  // Statusanzeige läuft weiter, ohne das DOM zu ersetzen
+  for(const w of leute){
+    const dot=el.querySelector(`.st[data-w="${w.id}"]`);
+    if(dot) dot.style.background = w.task?TYPES[w.task.typ].col:(onShift(w)?'#5C6670':'#3A424A');
+  }
+}
+
+function renderInspect(){
+  const el=$('inspect');
+  if(!S.sel){ el.innerHTML='<div class="empty">Auf Mitarbeiter, Palette oder Lagerplatz tippen.</div>'; return; }
+  if(S.sel.kind==='w'){
+    const w=S.workers.find(x=>x.id===S.sel.id);
+    if(!w){S.sel=null;return}
+    const t=w.task;
+    el.innerHTML=`
+      <div><span class="k">Mitarbeiter</span>${w.name} #${w.id}</div>
+      <div><span class="k">Schicht</span>${SHIFTNAMES[w.shift]}</div>
+      <div><span class="k">Bereich</span>${(BEREICHE[w.bereich]||BEREICHE.ALLE).lbl}</div>
+      <div><span class="k">Qualifikation</span>${w.skillStapler?'Staplerschein':'Handling'}</div>
+      <div><span class="k">Gerät</span>${w.ffz?`${FFZ_TYPES[w.ffz.typ].lbl} ${w.ffz.id} · ${(w.ffz.akku*100).toFixed(0)} %`:'zu Fuß'}</div>
+      <div><span class="k">Tempo</span>${w.tempo.toFixed(2)}</div>
+      <div><span class="k">Ermüdung</span>${(w.müde*100).toFixed(0)} %</div>
+      <div><span class="k">Erfahrung</span>${w.erf}</div>
+      <div><span class="k">Aktuell</span>${t?TYPES[t.typ].lbl:'Leerlauf'}</div>
+      <div><span class="k">Phase</span>${w.phase}</div>
+      <div><span class="k">Trägt</span>${w.carry||'—'}</div>`;
+  } else {
+    const hu=S.hus.get(S.sel.id);
+    if(!hu){S.sel=null;return}
+    const m=matOf(hu.sku);
+    const div = hu.bin&&hu.buchBin&&hu.buchBin!==hu.bin.id;
+    el.innerHTML=`
+      <div><span class="k">Handling Unit</span>${hu.id}</div>
+      <div><span class="k">Art</span>${hu.art==='KLT'?'Kleinladungsträger':'Europalette'}</div>
+      <div><span class="k">Material</span>${m.name}</div>
+      <div><span class="k">SKU / ABC</span>${hu.sku} · ${m.abc}${m.gef?' · Gefahrgut':''}</div>
+      <div><span class="k">Menge</span>${hu.menge} VE</div>
+      <div><span class="k">Status</span>${hu.status}</div>
+      <div><span class="k">Physisch</span>${hu.bin?hu.bin.id:(hu.slot?hu.slot.zone+' '+hu.slot.x+'/'+hu.slot.y:'unterwegs')}</div>
+      <div><span class="k">Gebucht</span><span style="color:${div?'#C4453B':'inherit'}">${hu.buchBin||'—'}</span></div>
+      <div><span class="k">Auftrag</span>${hu.orderId||'—'}</div>
+      ${div?'<div style="color:#C4453B">⚠ Buchbestand weicht ab</div>':''}`;
+  }
+}
+
+/* ── Interaktion ── */
+/* Verschieben per Finger/Maus; kurzer Tipp bleibt Auswahl */
+let zieht=false, zx=0, zy=0, bewegt=false;
+cv.addEventListener('pointerdown',e=>{ zieht=true; bewegt=false; zx=e.clientX; zy=e.clientY; });
+cv.addEventListener('pointermove',e=>{
+  if(!zieht)return;
+  const dx=e.clientX-zx, dy=e.clientY-zy;
+  if(Math.abs(dx)+Math.abs(dy)>6) bewegt=true;
+  if(bewegt){ panX+=dx; panY+=dy; zx=e.clientX; zy=e.clientY; clampPan(); }
+});
+addEventListener('pointerup',()=>{ zieht=false; });
+addEventListener('pointercancel',()=>{ zieht=false; });
+cv.style.touchAction='none';
+
+cv.addEventListener('click',e=>{
+  if(bewegt){ bewegt=false; return; }
+  const r=cv.getBoundingClientRect();
+  const gx=Math.floor((e.clientX-r.left-OX)/TS), gy=Math.floor((e.clientY-r.top-OY)/TS);
+  const w=S.workers.find(w=>onShift(w)&&Math.abs(w.x-gx)<0.75&&Math.abs(w.y-gy)<0.75);
+  if(w){ S.sel={kind:'w',id:w.id}; renderInspect(); return; }
+  const c=grid[gy]&&grid[gy][gx];
+  if(c){
+    if(c.slot&&c.slot.hu&&c.slot.hu!=='RES'){ S.sel={kind:'hu',id:c.slot.hu.id}; renderInspect(); return; }
+    if(c.bins){ const b=c.bins.find(b=>b.hu&&b.hu!=='RES');
+      if(b){ S.sel={kind:'hu',id:b.hu.id}; renderInspect(); return; } }
+  }
+  S.sel=null; renderInspect();
+});
+
+$('speeds').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  speed=+b.dataset.s;
+  [...$('speeds').children].forEach(x=>x.classList.toggle('on',x===b));
+});
+const tg=(id,key)=>$(id).addEventListener('click',()=>{
+  show[key]=!show[key]; $(id).classList.toggle('on',show[key]);
+});
+tg('tTasks','tasks'); tg('tBuch','buch'); tg('tBins','binids');
+$('zoombtn').addEventListener('click',()=>{
+  zoomAlles=!zoomAlles;
+  $('zoombtn').classList.toggle('on',zoomAlles);
+  $('zoombtn').textContent = zoomAlles?'Halle':'Gesamt';
+  panX=0; panY=0; resize();
+});
+
+$('anfragen').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const id=b.dataset.ok||b.dataset.spaet||b.dataset.no;
+  const a=S.anfragen.find(x=>x.id===id); if(!a)return;
+  if(b.dataset.ok)        annehmen(a,'wunsch');
+  else if(b.dataset.spaet) annehmen(a,'spaeter');
+  else                     ablehnen(a);
+  updateHUD();
+});
+$('auftraege').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  if(b.dataset.lf){
+    const o=S.orders.find(x=>x.id===b.dataset.lf); if(o) lieferungAnlegen(o);
+  } else if(b.dataset.la){
+    const lf=S.lieferungen.find(x=>x.id===b.dataset.la); if(lf) anLagerUebergeben(lf);
+  }
+  updateHUD();
+});
+$('autoAn').addEventListener('click',()=>{ S.autoAnnahme=!S.autoAnnahme; updateHUD(); });
+$('autoFr').addEventListener('click',()=>{
+  S.autoVersand=!S.autoVersand;
+  if(S.autoVersand){
+    S.orders.forEach(o=>{ if(o.status==='angenommen') lieferungAnlegen(o); });
+    S.lieferungen.forEach(lf=>{ if(lf.status==='angelegt') anLagerUebergeben(lf); });
+  }
+  updateHUD();
+});
+
+$('ffzbuy').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const k=b.dataset.ffz, p=FFZ_TYPES[k].preis;
+  if(S.kasse<p)return;
+  S.kasse-=p; const v=buyFFZ(k);
+  log(`${FFZ_TYPES[k].lbl} ${v.id} beschafft · −${fmt(p)} €`,'hot');
+});
+
+let hireShift=0;
+$('shiftpick').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  hireShift=+b.dataset.sh;
+  [...$('shiftpick').children].forEach(x=>x.classList.toggle('on',x===b));
+  planSig=''; updateHUD();
+});
+$('plan').addEventListener('change',e=>{
+  const sel=e.target.closest('select'); if(!sel)return;
+  const w=S.workers.find(x=>x.id===+sel.dataset.w); if(!w)return;
+  if(w.bereich===sel.value)return;
+  w.bereich=sel.value;
+  if(w.task)abortTask(w);                       // laufenden Fremdauftrag abgeben
+  log(`${w.name} → ${BEREICHE[w.bereich].lbl}`);
+  planSig=sel.closest('#plan')?planSig:'';      // Auswahl steht schon richtig, kein Neuaufbau nötig
+});
+$('hire').addEventListener('click',()=>{
+  if(S.kasse<2400)return;
+  S.kasse-=2400;
+  const w=hire(hireShift,'ALLE');
+  log(`${w.name} eingestellt · ${SHIFTNAMES[hireShift]} · Springer`,'hot');
+  planSig=''; updateHUD();
+});
+
+/* ══════════════════════════════════════════════════════════
+   12 · LOOP
+   ══════════════════════════════════════════════════════════ */
+const TICK_MS=560;
+let acc=0, last=performance.now(), hudAcc=0;
+function frame(now){
+  const dt=Math.min(now-last,250); last=now;
+  if(speed>0){
+    acc+=dt*speed;
+    let steps=0;
+    while(acc>=TICK_MS && steps<80){ acc-=TICK_MS; simTick(); steps++; }
+  }
+  const alpha = speed<=16 ? Math.min(1,acc/TICK_MS) : 1;
+  render(alpha);
+  hudAcc+=dt;
+  if(hudAcc>200){ hudAcc=0; updateHUD(); }
+  requestAnimationFrame(frame);
+}
+
+/* Anfangsbestand, damit ab der ersten Schicht kommissioniert werden kann */
+(function seed(){
+  const pal=bins.filter(b=>!b.hu&&!b.fach), fach=bins.filter(b=>!b.hu&&b.fach);
+  for(let i=0;i<120;i++){
+    const b=pal[Math.floor(Math.random()*pal.length)];
+    if(!b||b.hu)continue;
+    const m=MATS[Math.floor(Math.random()*MATS.length)];
+    const hu=newHU(m.sku,20+Math.floor(Math.random()*80));
+    placeInBin(hu,b); hu.buchBin=b.id; hu.status='eingelagert';
+  }
+  for(let i=0;i<14;i++){
+    const b=fach[Math.floor(Math.random()*fach.length)];
+    if(!b||b.hu)continue;
+    const m=MATS[Math.floor(Math.random()*MATS.length)];
+    const hu=newHU(m.sku,8+Math.floor(Math.random()*14),'KLT');
+    placeInBin(hu,b); hu.buchBin=b.id; hu.status='eingelagert';
+  }
+})();
+
+/* ── Mobile: Leitstand als aufklappbares Panel, Abschnitte als Akkordeon ── */
+(function mobilUI(){
+  const mobil=()=>window.matchMedia('(max-width:900px)').matches;
+
+  // Jeden Abschnitt faltbar machen
+  document.querySelectorAll('.rail .sec').forEach((sec,i)=>{
+    const h=sec.querySelector('.sech'); if(!h)return;
+    const body=document.createElement('div'); body.className='body';
+    while(h.nextSibling) body.appendChild(h.nextSibling);
+    sec.appendChild(body);
+    h.addEventListener('click',()=>sec.classList.toggle('zu'));
+    if(mobil()&&i>0) sec.classList.add('zu');       // nur Kennzahlen offen
+  });
+
+  // Farbschlüssel der Legende zusammenfassen
+  const leg=document.querySelector('.legend');
+  const key=document.createElement('div'); key.className='key';
+  [...leg.children].forEach(el=>{ if(el.tagName==='SPAN') key.appendChild(el); });
+  leg.insertBefore(key,leg.firstChild);
+  $('legbtn').addEventListener('click',()=>{
+    leg.classList.toggle('keyon');
+    $('legbtn').classList.toggle('on',leg.classList.contains('keyon'));
+    requestAnimationFrame(resize);
+  });
+
+  // Panel ein- und ausfahren
+  const rail=document.querySelector('.rail');
+  $('railbtn').addEventListener('click',()=>{
+    rail.classList.toggle('open');
+    $('railbtn').classList.toggle('on',rail.classList.contains('open'));
+    requestAnimationFrame(resize);
+  });
+  // Tippen in die Halle schließt das Panel wieder
+  document.querySelector('.canvaswrap').addEventListener('pointerdown',()=>{
+    if(mobil()&&rail.classList.contains('open')){
+      rail.classList.remove('open'); $('railbtn').classList.remove('on');
+      requestAnimationFrame(resize);
+    }
+  });
+  $('zoombtn').textContent = zoomAlles?'Halle':'Gesamt';
+  $('zoombtn').classList.toggle('on',zoomAlles);
+  window.addEventListener('orientationchange',()=>setTimeout(resize,120));
+})();
+
+resize();
+log('Schicht beginnt · Halle betriebsbereit','hot');
+announceTruck();
+S.avise[0].ankunftGeplant=tick+10;
+updateHUD();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
