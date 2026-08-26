@@ -1182,25 +1182,24 @@ function followUp(t){
 /* ══════════════════════════════════════════════════════════
    8 · ANLIEFERUNG & AUFTRÄGE
    ══════════════════════════════════════════════════════════ */
-/* Avis: Anlieferung wird vorher angekündigt — Planungsvorlauf statt Überraschung */
-function announceTruck(){
-  const n=3+Math.floor(Math.random()*5);
-  const lead=60+Math.floor(Math.random()*80);
-  S.avise.push({n, ankunftGeplant:tick+lead,
-    lieferant:['Nordfracht','Kettler Logistik','SpedTrans','Möller & Sohn'][Math.floor(Math.random()*4)]});
-  log(`Avis: ${n} Paletten in ca. ${Math.round(lead*MIN_PER_TICK/60)} h`);
-}
+/* Anlieferung: ein Einlagerungsauftrag ist angenommen, der Kunde bringt
+   genau die vereinbarten Paletten. Sie gehören ihm (owner) und werden
+   für ihn eingelagert, bis ein Versandauftrag sie wieder abruft. */
 function arriveTruck(av){
   const hus=[];
-  for(let i=0;i<av.n;i++){
-    const m=MATS[Math.floor(Math.random()*MATS.length)];
-    hus.push(newHU(m.sku,20+Math.floor(Math.random()*80)));
+  const positionen = av.positionen || [];
+  for(const p of positionen){
+    for(let i=0;i<p.anzahl;i++){
+      const hu=newHU(p.sku, 20+Math.floor(Math.random()*80));
+      hu.owner=av.kunde;
+      hus.push(hu);
+    }
   }
-  const tr={hus:hus.map(h=>h.id),ankunft:tick,lieferant:av.lieferant,door:null,
+  const tr={hus:hus.map(h=>h.id),ankunft:tick,lieferant:av.lieferant||av.kunde,door:null,
             docked:false,vis:newVis(-1),seite:-1};
   S.hofIn.push(tr);
   routeToQueue(tr,S.hofIn.length-1);
-  log(`${av.lieferant} fährt auf das Gelände · ${av.n} Paletten`,'hot');
+  log(`${tr.lieferant} bringt Einlagerung · ${av.n} Paletten`,'hot');
 }
 
 /* Über die Einfahrt auf die Wartespur */
@@ -1268,21 +1267,61 @@ function verfuegbar(sku,art){
   return n;
 }
 function pruefeAnfrage(a){
+  if(a.kanal==='EINLAG'){                    // Einlagerung: reicht der Platz?
+    const frei=bins.filter(b=>!b.hu&&!b.fach).length;
+    const need=a.positionen.reduce((s,p)=>s+p.anzahl,0);
+    return Math.max(0,need-frei);
+  }
   if(a.kanal==='KEP') return verfuegbar(a.sku,'PAL')>0 ? 0 : a.pakete;
   let fehlt=0;
-  for(const pos of a.positionen) fehlt += Math.max(0,pos.anzahl-verfuegbar(pos.sku,pos.art));
+  // Kleinmengen (KLT) lassen sich zusätzlich aus vorhandenen Paletten anbrechen
+  for(const pos of a.positionen){
+    let da=verfuegbar(pos.sku,pos.art);
+    if(pos.art==='KLT') da += verfuegbar(pos.sku,'PAL')*3;
+    fehlt += Math.max(0,pos.anzahl-da);
+  }
   return fehlt;
 }
+const kunde=()=>KUNDEN[Math.floor(Math.random()*KUNDEN.length)];
+
+/* Einlagerungsauftrag: ein Kunde möchte Paletten bei uns einlagern.
+   Kommt nur herein, solange freier Palettenplatz da ist. */
+function spawnEinlagerung(){
+  const frei=bins.filter(b=>!b.hu&&!b.fach).length;
+  if(frei<2 || S.annahmestopp) return null;
+  const m=MATS[Math.floor(Math.random()*MATS.length)];
+  const anzahl=Math.min(frei, 2+Math.floor(Math.random()*5));
+  const entgelt=Math.round(anzahl*(140+Math.random()*90)*(0.85+S.ruf/100*0.3));
+  const a={
+    id:'EA'+String(S.anfrageSeq++).padStart(4,'0'),
+    kunde:kunde(), kanal:'EINLAG', eilig:false,
+    positionen:[{sku:m.sku,anzahl,art:'PAL'}],
+    entgelt, erloes:entgelt, strafe:0,
+    ablauf: tick+180+Math.floor(Math.random()*160),
+    created: tick,
+  };
+  S.anfragen.push(a);
+  log(`Einlagerung ${a.id} · ${a.kunde} · ${anzahl} Pal ${m.sku}`,'hot');
+  return a;
+}
+
+/* Versandauftrag: greift auf eingelagerte Kundenware zu. SKUs werden aus
+   dem tatsächlichen Bestand gewählt, damit nichts Unerfüllbares entsteht.
+   Kleinmengen (KLT) sind möglich, wenn KLT vorhanden ODER eine Palette
+   zum Anbrechen im Lager liegt. */
 function spawnAnfrage(){
-  if(Math.random()<0.32){                       // Paketauftrag statt Palettensendung
-    const m=MATS[Math.floor(Math.random()*MATS.length)];
+  const palSkus=MATS.map(m=>m.sku).filter(s=>verfuegbar(s,'PAL')>0);
+  const anySkus=MATS.map(m=>m.sku).filter(s=>verfuegbar(s,'PAL')>0||verfuegbar(s,'KLT')>0);
+  if(!anySkus.length) return spawnEinlagerung();      // nichts auf Lager → nur Einlagerung
+
+  if(palSkus.length && Math.random()<0.32){           // Paketauftrag aus einer Palette
+    const sku=palSkus[Math.floor(Math.random()*palSkus.length)];
     const pakete=4+Math.floor(Math.random()*7);
     const eilig=Math.random()<0.3;
     const a={
       id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
-      kunde:KUNDEN[Math.floor(Math.random()*KUNDEN.length)],
-      kanal:'KEP', sku:m.sku, pakete, eilig,
-      positionen:[{sku:m.sku,anzahl:pakete,art:'PKT'}],
+      kunde:kunde(), kanal:'KEP', sku, pakete, eilig,
+      positionen:[{sku,anzahl:pakete,art:'PKT'}],
       wunsch: tick+(eilig?800:1700)+Math.floor(Math.random()*700),
       erloes: Math.round(pakete*(eilig?300:215)*(0.85+S.ruf/100*0.3)),
       strafe: Math.round(pakete*130),
@@ -1290,15 +1329,19 @@ function spawnAnfrage(){
       created: tick,
     };
     S.anfragen.push(a);
-    log(`Anfrage ${a.id} · ${a.kunde} · ${pakete} Pakete`,'hot');
+    log(`Versand ${a.id} · ${a.kunde} · ${pakete} Pakete`,'hot');
     return a;
   }
+
   const positionen=[];
   const n=1+Math.floor(Math.random()*2);
   for(let i=0;i<n;i++){
-    const m=MATS[Math.floor(Math.random()*MATS.length)];
-    positionen.push({sku:m.sku,anzahl:1+Math.floor(Math.random()*2),
-                     art: Math.random()<0.4?'KLT':'PAL'});
+    const sku=anySkus[Math.floor(Math.random()*anySkus.length)];
+    const hatPal=verfuegbar(sku,'PAL')>0, hatKlt=verfuegbar(sku,'KLT')>0;
+    // Kleinmenge nur, wenn KLT da sind oder eine Palette angebrochen werden kann
+    const art = ((hatKlt||hatPal) && Math.random()<0.4) ? 'KLT' : (hatPal?'PAL':'KLT');
+    const max = art==='PAL' ? verfuegbar(sku,'PAL') : Math.max(1, hatKlt?verfuegbar(sku,'KLT'):3);
+    positionen.push({sku, anzahl:1+Math.floor(Math.random()*Math.min(2,Math.max(1,max))), art});
   }
   const stueck=positionen.reduce((x,p)=>x+p.anzahl,0);
   const eilig=Math.random()<0.28;
@@ -1307,8 +1350,7 @@ function spawnAnfrage(){
   const rufFaktor = 0.85+S.ruf/100*0.3;
   const a={
     id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
-    kunde:KUNDEN[Math.floor(Math.random()*KUNDEN.length)],
-    positionen, eilig,
+    kunde:kunde(), positionen, eilig,
     wunsch: tick+frist,
     erloes: Math.round(stueck*(eilig?520:360)*rufFaktor),
     strafe: Math.round(stueck*(eilig?340:220)),
@@ -1316,12 +1358,40 @@ function spawnAnfrage(){
     created: tick,
   };
   S.anfragen.push(a);
-  log(`Anfrage ${a.id} · ${a.kunde}${a.eilig?' · EILIG':''}`,'hot');
+  log(`Versand ${a.id} · ${a.kunde}${a.eilig?' · EILIG':''}`,'hot');
   return a;
+}
+
+/* Dispatcher: ohne Bestand kann nur eingelagert werden, sonst Mischung.
+   So bootet die Halle sich selbst über die ersten Einlagerungen. */
+function spawnAuftrag(){
+  const bestand=[...S.hus.values()].some(h=>h.status==='eingelagert'&&!h.orderId);
+  if(!bestand) return spawnEinlagerung();
+  return Math.random()<0.45 ? spawnEinlagerung() : spawnAnfrage();
+}
+
+/* Bedarfs-Vereinzelung: eine eingelagerte Palette der SKU anbrechen,
+   damit ein Ausgangsauftrag Kleinmengen (KLT) bekommt. */
+function ensureKLT(sku){
+  if(S.tasks.some(t=>t.typ==='ABPACKEN'&&S.hus.get(t.huId)&&S.hus.get(t.huId).sku===sku))return;
+  if(!slots.UMPACK.some(sl=>!sl.hu))return;            // kein Vereinzelungsplatz frei
+  const pal=[...S.hus.values()].find(h=>h.sku===sku&&h.art==='PAL'&&h.status==='eingelagert'&&!h.orderId&&h.bin&&!h.bin.fach);
+  if(pal) addTask('ABPACKEN',pal.id,4);
 }
 /* Annahme mit Terminvereinbarung. 'spaeter' verschiebt den zugesagten
    Warenausgang, kostet Erlös, verhindert aber die Pönale. */
 function annehmen(a,modus){
+  if(a.kanal==='EINLAG'){                     // Einlagerung: Kunde bringt die Paletten
+    const n=a.positionen.reduce((s,p)=>s+p.anzahl,0);
+    const lead=40+Math.floor(Math.random()*60);
+    S.avise.push({n, positionen:a.positionen.map(p=>({...p})),
+                  kunde:a.kunde, lieferant:a.kunde, ankunftGeplant:tick+lead});
+    S.kasse += a.entgelt||0;
+    S.ruf=Math.max(0,Math.min(100,S.ruf+0.4));
+    S.anfragen=S.anfragen.filter(x=>x!==a);
+    log(`Einlagerung ${a.id} angenommen · ${n} Pal · Entgelt +${a.entgelt||0} €`);
+    return null;
+  }
   const spaeter = modus==='spaeter';
   const o={id:a.id,
            kunde:a.kunde, positionen:a.positionen,
@@ -1379,7 +1449,10 @@ function tryPick(o){
       if(rest<=0)break;
       if(hu.sku===p.sku&&hu.art===(p.art||'PAL')&&hu.status==='eingelagert'&&!hu.orderId){ need.push(hu); rest--; }
     }
-    if(rest>0)return false;  // Fehlmenge → Auftrag wartet
+    if(rest>0){                                 // Fehlmenge → Auftrag wartet
+      if((p.art||'PAL')==='KLT') ensureKLT(p.sku);   // Kleinmenge: Palette anbrechen
+      return false;
+    }
   }
   need.forEach(hu=>{ hu.orderId=o.id; o.hus.push(hu.id);
     addTask('KOMMISSIONIEREN',hu.id, (o.eil||tick>o.due-420)?2:5, {la:o.la}); });
@@ -1497,31 +1570,23 @@ function simTick(){
     }
   });
 
-  // Avis & Aufträge — bewusst ruhige Taktung
-  if(tick%660===0){
-    const belegt=bins.filter(b=>b.hu&&!b.fach).length/bins.filter(b=>!b.fach).length;
-    if(belegt>0.92){                       // Annahmestopp statt stillem Verklemmen
-      if(!S.annahmestopp){ S.annahmestopp=true; log('Lager voll · Wareneingang gestoppt','bad'); }
-    } else { if(S.annahmestopp){ S.annahmestopp=false; log('Wareneingang wieder frei'); }
-             announceTruck(); }
+  // Auslastungsanzeige: ab ~92 % belegten Palettenplätzen keine Einlagerung mehr
+  if(tick%120===0){
+    const palBins=bins.filter(b=>!b.fach);
+    const belegt=palBins.filter(b=>b.hu).length/palBins.length;
+    if(belegt>0.92){ if(!S.annahmestopp){ S.annahmestopp=true; log('Lager fast voll · Einlagerung gesperrt','bad'); } }
+    else if(S.annahmestopp){ S.annahmestopp=false; log('Lagerkapazität wieder frei'); }
   }
-  if(tick%420===0) spawnAnfrage();
+  // Auftragseingang: Kunden fragen Ein- oder Auslagerung an
+  if(tick%420===0) spawnAuftrag();
 
   for(let i=S.avise.length-1;i>=0;i--){
     if(tick>=S.avise[i].ankunftGeplant){ arriveTruck(S.avise[i]); S.avise.splice(i,1); }
   }
   if(tick%4===0) dockTrucks();
 
-  // Nachschub Vereinzelung: Fachbodenlager auffüllen
-  if(tick%45===0){
-    for(const m of MATS){
-      const klt=[...S.hus.values()].filter(h=>h.sku===m.sku&&h.art==='KLT'&&!h.orderId).length;
-      const läuft=S.tasks.some(t=>t.typ==='ABPACKEN'&&S.hus.get(t.huId)&&S.hus.get(t.huId).sku===m.sku);
-      if(klt>=3||läuft)continue;
-      const pal=[...S.hus.values()].find(h=>h.sku===m.sku&&h.art==='PAL'&&h.status==='eingelagert'&&!h.orderId&&h.bin&&!h.bin.fach);
-      if(pal&&slots.UMPACK.some(sl=>!sl.hu)) addTask('ABPACKEN',pal.id,6);
-    }
-  }
+  // Keine Vorrats-Vereinzelung mehr: Paletten werden nur angebrochen,
+  // wenn ein Ausgangsauftrag Kleinmengen (KLT) anfordert → ensureKLT().
 
   // Anfragen laufen ab, wenn niemand entscheidet
   for(let i=S.anfragen.length-1;i>=0;i--){
@@ -2396,8 +2461,8 @@ function render(alpha){
     drawHU(hu,px,py,sz,sz,{rand:hu.status==='versandbereit'?'#5FA35A':null});
     if(hu.status==='beschädigt'||hu.status==='gesperrt'){
       ctx.strokeStyle='#C4453B'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+s,py+s);
-      ctx.moveTo(px+s,py); ctx.lineTo(px,py+s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+sz,py+sz);
+      ctx.moveTo(px+sz,py); ctx.lineTo(px,py+sz); ctx.stroke();
     }
   }
 
@@ -2590,10 +2655,23 @@ function updateHUD(){
   $('anfcount').textContent=S.anfragen.length;
   $('anfragen').innerHTML = S.anfragen.map(a=>{
     const fehlt=pruefeAnfrage(a);
+    const rest=Math.max(0,a.ablauf-tick);
+    if(a.kanal==='EINLAG'){                     // Einlagerung: Kunde will Lagerplatz
+      const posTxt=a.positionen.map(pz=>`${pz.anzahl}× ${pz.sku} Pal`).join(' · ');
+      return `<div class="anf ${fehlt?'':'ok'}">
+        <div class="k"><span>${a.kunde}</span><span style="color:var(--muted)">${a.id}</span></div>
+        <div class="p">Einlagern: ${posTxt}</div>
+        <div class="m">Einlagerungsentgelt ${fmt(a.entgelt)} €
+          · ${fehlt?`<span class="fehl">${fehlt} Pal kein Platz</span>`:'Platz vorhanden'}
+          · Antwort in ${Math.ceil(rest*MIN_PER_TICK)} min</div>
+        <div class="b">
+          <button class="ja" data-ok="${a.id}">Einlagern</button>
+          <button class="nein" data-no="${a.id}">Ablehnen</button>
+        </div></div>`;
+    }
     const posTxt = a.kanal==='KEP'
       ? `${a.pakete} Pakete ${a.sku}`
       : a.positionen.map(pz=>`${pz.anzahl}× ${pz.sku} ${pz.art==='KLT'?'Stk':'Pal'}`).join(' · ');
-    const rest=Math.max(0,a.ablauf-tick);
     return `<div class="anf ${a.eilig?'eil':(fehlt?'':'ok')}">
       <div class="k"><span>${a.kunde}</span><span style="color:var(--muted)">${a.id}</span></div>
       <div class="p">${posTxt}</div>
@@ -2878,24 +2956,8 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 
-/* Anfangsbestand, damit ab der ersten Schicht kommissioniert werden kann */
-(function seed(){
-  const pal=bins.filter(b=>!b.hu&&!b.fach), fach=bins.filter(b=>!b.hu&&b.fach);
-  for(let i=0;i<120;i++){
-    const b=pal[Math.floor(Math.random()*pal.length)];
-    if(!b||b.hu)continue;
-    const m=MATS[Math.floor(Math.random()*MATS.length)];
-    const hu=newHU(m.sku,20+Math.floor(Math.random()*80));
-    placeInBin(hu,b); hu.buchBin=b.id; hu.status='eingelagert';
-  }
-  for(let i=0;i<14;i++){
-    const b=fach[Math.floor(Math.random()*fach.length)];
-    if(!b||b.hu)continue;
-    const m=MATS[Math.floor(Math.random()*MATS.length)];
-    const hu=newHU(m.sku,8+Math.floor(Math.random()*14),'KLT');
-    placeInBin(hu,b); hu.buchBin=b.id; hu.status='eingelagert';
-  }
-})();
+/* Kein Anfangsbestand: die Halle startet leer. Bestand entsteht
+   ausschließlich aus angenommenen Einlagerungsaufträgen der Kunden. */
 
 /* ── Mobile: Leitstand als aufklappbares Panel, Abschnitte als Akkordeon ── */
 (function mobilUI(){
@@ -2942,9 +3004,8 @@ function frame(now){
 })();
 
 resize();
-log('Schicht beginnt · Halle betriebsbereit','hot');
-announceTruck();
-S.avise[0].ankunftGeplant=tick+10;
+log('Schicht beginnt · Halle leer · warten auf Einlagerungsaufträge','hot');
+spawnEinlagerung();
 updateHUD();
 requestAnimationFrame(frame);
 </script>
