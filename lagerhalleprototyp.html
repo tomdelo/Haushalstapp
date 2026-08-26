@@ -512,6 +512,16 @@ const clockOf=t=>{
 const shiftOf=t=>{ const h=clockOf(t).h; return h<14?0:(h<22?1:2); };
 const SHIFTNAMES=['Frühschicht','Spätschicht','Nachtschicht'];
 
+/* Reine Uhrzeit — für Anzeigen innerhalb desselben Tages */
+const zeitOf=t=>{const q=clockOf(t);return `${String(q.h).padStart(2,'0')}:${String(q.m).padStart(2,'0')}`};
+/* Termin mit Datum, relativ zum aktuellen Tag: Aufträge laufen über
+   mehrere Tage, deshalb heute/morgen/übermorgen bzw. "Tag N". */
+const terminOf=t=>{
+  const q=clockOf(t), dd=q.d-clockOf(tick).d;
+  const tag = dd<=0?'heute':(dd===1?'morgen':(dd===2?'übermorgen':`Tag ${q.d}`));
+  return `${tag} ${zeitOf(t)}`;
+};
+
 function log(msg,cls){
   const c=clockOf(tick);
   S.log.unshift({t:`${String(c.h).padStart(2,'0')}:${String(c.m).padStart(2,'0')}`,msg,cls});
@@ -1292,16 +1302,21 @@ function spawnEinlagerung(){
   const m=MATS[Math.floor(Math.random()*MATS.length)];
   const anzahl=Math.min(frei, 2+Math.floor(Math.random()*5));
   const entgelt=Math.round(anzahl*(140+Math.random()*90)*(0.85+S.ruf/100*0.3));
+  // Anlieferung teils noch heute, teils erst in 1–3 Tagen
+  const lead = Math.random()<0.45
+    ? 60+Math.floor(Math.random()*120)
+    : TICKS_PER_DAY*(1+Math.floor(Math.random()*3)) + Math.floor(Math.random()*TICKS_PER_DAY);
   const a={
     id:'EA'+String(S.anfrageSeq++).padStart(4,'0'),
     kunde:kunde(), kanal:'EINLAG', eilig:false,
     positionen:[{sku:m.sku,anzahl,art:'PAL'}],
     entgelt, erloes:entgelt, strafe:0,
+    anlieferung: tick+lead,
     ablauf: tick+180+Math.floor(Math.random()*160),
     created: tick,
   };
   S.anfragen.push(a);
-  log(`Einlagerung ${a.id} · ${a.kunde} · ${anzahl} Pal ${m.sku}`,'hot');
+  log(`Einlagerung ${a.id} · ${a.kunde} · ${anzahl} Pal ${m.sku} · Anlieferung ${terminOf(a.anlieferung)}`,'hot');
   return a;
 }
 
@@ -1322,7 +1337,8 @@ function spawnAnfrage(){
       id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
       kunde:kunde(), kanal:'KEP', sku, pakete, eilig,
       positionen:[{sku,anzahl:pakete,art:'PKT'}],
-      wunsch: tick+(eilig?800:1700)+Math.floor(Math.random()*700),
+      wunsch: tick + (eilig ? 800+Math.floor(Math.random()*500)
+                            : TICKS_PER_DAY + Math.floor(Math.random()*TICKS_PER_DAY*2)),
       erloes: Math.round(pakete*(eilig?300:215)*(0.85+S.ruf/100*0.3)),
       strafe: Math.round(pakete*130),
       ablauf: tick+180+Math.floor(Math.random()*160),
@@ -1345,8 +1361,9 @@ function spawnAnfrage(){
   }
   const stueck=positionen.reduce((x,p)=>x+p.anzahl,0);
   const eilig=Math.random()<0.28;
+  // Eilaufträge am selben Tag, Standardaufträge über 1–3 Tage verteilt
   const frist = eilig ? 700+Math.floor(Math.random()*400)
-                      : 1600+Math.floor(Math.random()*1200);
+                      : TICKS_PER_DAY + Math.floor(Math.random()*TICKS_PER_DAY*2.2);
   const rufFaktor = 0.85+S.ruf/100*0.3;
   const a={
     id:'KA'+String(S.anfrageSeq++).padStart(4,'0'),
@@ -1383,13 +1400,13 @@ function ensureKLT(sku){
 function annehmen(a,modus){
   if(a.kanal==='EINLAG'){                     // Einlagerung: Kunde bringt die Paletten
     const n=a.positionen.reduce((s,p)=>s+p.anzahl,0);
-    const lead=40+Math.floor(Math.random()*60);
+    const ankunft = a.anlieferung || tick+60;
     S.avise.push({n, positionen:a.positionen.map(p=>({...p})),
-                  kunde:a.kunde, lieferant:a.kunde, ankunftGeplant:tick+lead});
+                  kunde:a.kunde, lieferant:a.kunde, ankunftGeplant:ankunft});
     S.kasse += a.entgelt||0;
     S.ruf=Math.max(0,Math.min(100,S.ruf+0.4));
     S.anfragen=S.anfragen.filter(x=>x!==a);
-    log(`Einlagerung ${a.id} angenommen · ${n} Pal · Entgelt +${a.entgelt||0} €`);
+    log(`Einlagerung ${a.id} angenommen · ${n} Pal · Anlieferung ${terminOf(ankunft)} · Entgelt +${a.entgelt||0} €`);
     return null;
   }
   const spaeter = modus==='spaeter';
@@ -2629,7 +2646,6 @@ function updateHUD(){
             <div class="bar"><i style="width:${tot?n/tot*100:0}%;background:${TYPES[k].col}"></i></div>`;
   }).join('');
 
-  const hh=t=>{const q=clockOf(t);return `${String(q.h).padStart(2,'0')}:${String(q.m).padStart(2,'0')}`};
   let hof='';
   S.trucksIn.forEach((tr,i)=>{
     if(!tr){ hof+=`<div><span style="color:var(--muted)">WE ${i+1}</span> &nbsp;frei</div>`; return; }
@@ -2645,13 +2661,12 @@ function updateHUD(){
   if(S.hofIn.length) hof+=`<div style="color:var(--sig-yellow)">↳ ${S.hofIn.length} LKW warten im Hof</div>`;
   if(S.hofOut.length) hof+=`<div style="color:var(--sig-yellow)">↳ ${S.hofOut.length} Auftrag/Aufträge warten auf Tor</div>`;
   S.avise.slice(0,3).forEach(a=>{
-    hof+=`<div style="color:var(--muted)">Avis ${hh(a.ankunftGeplant)} · ${a.lieferant} · ${a.n} Pal.</div>`;
+    hof+=`<div style="color:var(--muted)">Avis ${terminOf(a.ankunftGeplant)} · ${a.lieferant} · ${a.n} Pal.</div>`;
   });
   $('hof').innerHTML=hof;
   $('hofcount').textContent=S.hofIn.length+S.hofOut.length;
 
   // ── Kundenaufträge im Eingang: prüfen, Termin vereinbaren, annehmen
-  const uhr=t=>{const q=clockOf(t);return `${String(q.h).padStart(2,'0')}:${String(q.m).padStart(2,'0')}`};
   $('anfcount').textContent=S.anfragen.length;
   $('anfragen').innerHTML = S.anfragen.map(a=>{
     const fehlt=pruefeAnfrage(a);
@@ -2661,9 +2676,9 @@ function updateHUD(){
       return `<div class="anf ${fehlt?'':'ok'}">
         <div class="k"><span>${a.kunde}</span><span style="color:var(--muted)">${a.id}</span></div>
         <div class="p">Einlagern: ${posTxt}</div>
-        <div class="m">Einlagerungsentgelt ${fmt(a.entgelt)} €
-          · ${fehlt?`<span class="fehl">${fehlt} Pal kein Platz</span>`:'Platz vorhanden'}
-          · Antwort in ${Math.ceil(rest*MIN_PER_TICK)} min</div>
+        <div class="m">Anlieferung ${terminOf(a.anlieferung)} · Einlagerungsentgelt ${fmt(a.entgelt)} €
+          · ${fehlt?`<span class="fehl">${fehlt} Pal kein Platz</span>`:'Platz vorhanden'}</div>
+        <div class="m">Antwort in ${Math.ceil(rest*MIN_PER_TICK)} min</div>
         <div class="b">
           <button class="ja" data-ok="${a.id}">Einlagern</button>
           <button class="nein" data-no="${a.id}">Ablehnen</button>
@@ -2675,7 +2690,7 @@ function updateHUD(){
     return `<div class="anf ${a.eilig?'eil':(fehlt?'':'ok')}">
       <div class="k"><span>${a.kunde}</span><span style="color:var(--muted)">${a.id}</span></div>
       <div class="p">${posTxt}</div>
-      <div class="m">WA-Wunsch ${uhr(a.wunsch)} · ${fmt(a.erloes)} € · Pönale ${fmt(a.strafe)} €
+      <div class="m">WA-Wunsch ${terminOf(a.wunsch)} · ${fmt(a.erloes)} € · Pönale ${fmt(a.strafe)} €
         ${a.eilig?' · <span class="fehl">EILIG</span>':''}</div>
       <div class="m">${fehlt?`<span class="fehl">${fehlt} Einheiten fehlen</span>`:'Bestand geprüft · verfügbar'}
         · Antwort in ${Math.ceil(rest*MIN_PER_TICK)} min</div>
@@ -2696,14 +2711,14 @@ function updateHUD(){
   for(const o of wartetVersand.slice(0,4)){
     vs+=`<div class="anf ${o.eil?'eil':''}">
       <div class="k"><span>${o.kunde}</span><span style="color:var(--muted)">${o.id}</span></div>
-      <div class="m">angenommen · WA-Termin ${uhr(o.due)}${o.verschoben?' (verschoben)':''}</div>
+      <div class="m">angenommen · WA-Termin ${terminOf(o.due)}${o.verschoben?' (verschoben)':''}</div>
       <div class="b"><button class="frei" data-lf="${o.id}">Lieferung anlegen</button></div>
     </div>`;
   }
   for(const lf of lfOffen.slice(0,4)){
     vs+=`<div class="anf">
       <div class="k"><span>${lf.kunde}</span><span style="color:var(--muted)">${lf.id}</span></div>
-      <div class="m">Lieferung angelegt · zu ${lf.ka} · WA ${uhr(lf.termin)}</div>
+      <div class="m">Lieferung angelegt · zu ${lf.ka} · WA ${terminOf(lf.termin)}</div>
       <div class="b"><button class="frei" data-la="${lf.id}">An Lager übergeben</button></div>
     </div>`;
   }
@@ -2715,7 +2730,7 @@ function updateHUD(){
     vs+=`<div class="anf ${o.eil?'eil':''}">
       <div class="k"><span>${la?la.id:o.id}</span><span style="color:var(--muted)">${o.lf||''}</span></div>
       <div class="m">${lbl}${la&&la.soll?` · ${Math.max(0,la.soll-rest)}/${la.soll} Lageraufgaben`:''}
-        · WA ${uhr(o.due)}${tick>o.due?' · <span class="fehl">überfällig</span>':''}</div>
+        · WA ${terminOf(o.due)}${tick>o.due?' · <span class="fehl">überfällig</span>':''}</div>
     </div>`;
   }
   $('auftraege').innerHTML = vs || '<div style="color:var(--muted);font-size:12px">Keine laufenden Belege.</div>';
@@ -3005,7 +3020,7 @@ function frame(now){
 
 resize();
 log('Schicht beginnt · Halle leer · warten auf Einlagerungsaufträge','hot');
-spawnEinlagerung();
+{ const a0=spawnEinlagerung(); if(a0) a0.anlieferung=tick+60+Math.floor(Math.random()*90); }  // erster Auftrag noch heute
 updateHUD();
 requestAnimationFrame(frame);
 </script>
