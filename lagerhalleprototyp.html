@@ -521,6 +521,11 @@ const terminOf=t=>{
   const tag = dd<=0?'heute':(dd===1?'morgen':(dd===2?'übermorgen':`Tag ${q.d}`));
   return `${tag} ${zeitOf(t)}`;
 };
+/* Zeitspanne (Ticks → „2 h 30 min") — für Dauer- und Pufferanzeigen */
+const spanneOf=dt=>{
+  const min=Math.round(Math.abs(dt)*MIN_PER_TICK), h=Math.floor(min/60), m=min%60;
+  return (h?h+' h ':'')+m+' min';
+};
 
 function log(msg,cls){
   const c=clockOf(tick);
@@ -1440,16 +1445,44 @@ function lieferungAnlegen(o){
   return lf;
 }
 
-/* Übergabe ans Lager: Lagerauftrag mit Lageraufgaben entsteht */
+/* Grobe Schätzung, wie lange Kommissionierung + Packen/Paketieren +
+   Bereitstellung im Warenausgang dauern (in Ticks). Dient als Planhilfe:
+   daraus ergibt sich der Vorschlag, wann mit dem Picken zu beginnen ist. */
+function schätzDauer(o){
+  if(o.kanal==='KEP') return 300 + (o.pakete||0)*18;        // Zuführen + Paketieren + Abholung
+  let d=180;                                                // Rüsten/Wege
+  for(const p of (o.positionen||[])){
+    d += p.anzahl*200;                                      // je Einheit kommissionieren + packen
+    if((p.art||'PAL')==='KLT') d += 350;                    // ggf. Palette anbrechen (Vereinzeln)
+  }
+  return d + 350;                                           // Bereitstellung + WA-Tor + Verladen
+}
+
+/* Übergabe ans Lager: Lagerauftrag entsteht, aber die Kommissionierung
+   startet NICHT sofort — der Leitstand plant den Startzeitpunkt selbst.
+   Vorgeschlagen wird ein Start, der die Ware gerade rechtzeitig fertig
+   macht; anpassbar über die Steuerung im Panel „Versand & Lager". */
 function anLagerUebergeben(lf){
   if(lf.status!=='angelegt')return false;
   const o=S.orders.find(x=>x.id===lf.ka); if(!o)return false;
   const la={id:'LA'+String(S.laSeq++).padStart(4,'0'), lf:lf.id, ka:o.id,
-            status:'offen', created:tick};
+            status:'geplant', created:tick};
   S.lageraufteaege.push(la);
   lf.status='imLager'; lf.la=la.id;
-  o.la=la.id; o.status='offen';
-  log(`${la.id} an das Lager übergeben`);
+  o.la=la.id; o.status='geplant';
+  o.dauer=schätzDauer(o);
+  o.startPlan=Math.min(o.due, Math.max(tick, o.due-o.dauer));   // gerade rechtzeitig
+  log(`${la.id} ans Lager · Kommissionierstart geplant ${terminOf(o.startPlan)}`);
+  return true;
+}
+
+/* Kommissionierung eines geplanten Auftrags freigeben (Zeitpunkt erreicht
+   oder manuell „jetzt starten"). Erst danach greift die Bestandsvergabe. */
+function freigeben(o){
+  if(o.status!=='geplant')return false;
+  o.status='offen';
+  const la=S.lageraufteaege.find(x=>x.id===o.la); if(la)la.status='offen';
+  log(`${o.la||o.id} · Kommissionierung freigegeben`);
   return true;
 }
 function ablehnen(a){
@@ -1618,6 +1651,12 @@ function simTick(){
   if(S.autoVersand && tick%10===0){
     for(const o of S.orders) if(o.status==='angenommen') lieferungAnlegen(o);
     for(const lf of S.lieferungen) if(lf.status==='angelegt') anLagerUebergeben(lf);
+  }
+  // Geplante Aufträge zum selbst gewählten Startzeitpunkt freigeben
+  if(tick%5===0){
+    for(const o of S.orders){
+      if(o.status==='geplant' && tick>=o.startPlan) freigeben(o);
+    }
   }
   // Freigegebene Aufträge einplanen
   if(tick%20===0){
@@ -2701,11 +2740,12 @@ function updateHUD(){
       </div></div>`;
   }).join('') || '<div style="color:var(--muted);font-size:12px">Kein Auftragseingang.</div>';
 
-  // ── Versand & Lager: Beleglauf KA → LF → LA
+  // ── Versand & Lager: Beleglauf KA → LF → LA → Kommissionierplanung
   const wartetVersand=S.orders.filter(o=>o.status==='angenommen');
   const lfOffen=S.lieferungen.filter(l=>l.status==='angelegt');
+  const geplant=S.orders.filter(o=>o.status==='geplant');
   const laufend=S.orders.filter(o=>['offen','inArbeit','wartetAufTor','verladen','lieferung'].includes(o.status));
-  $('aufcount').textContent=wartetVersand.length+lfOffen.length+laufend.length;
+  $('aufcount').textContent=wartetVersand.length+lfOffen.length+geplant.length+laufend.length;
 
   let vs='';
   for(const o of wartetVersand.slice(0,4)){
@@ -2721,6 +2761,22 @@ function updateHUD(){
       <div class="m">Lieferung angelegt · zu ${lf.ka} · WA ${terminOf(lf.termin)}</div>
       <div class="b"><button class="frei" data-la="${lf.id}">An Lager übergeben</button></div>
     </div>`;
+  }
+  // Kommissionierstart planen: Ware soll pünktlich im Warenausgang stehen
+  for(const o of geplant.slice(0,6)){
+    const la=S.lageraufteaege.find(x=>x.id===o.la);
+    const fertig=o.startPlan+(o.dauer||schätzDauer(o));
+    const puffer=o.due-fertig, spät=puffer<0;
+    vs+=`<div class="anf ${o.eil?'eil':'ok'}" style="${spät?'border-left-color:var(--alarm)':''}">
+      <div class="k"><span>${la?la.id:o.id}</span><span style="color:var(--muted)">${o.kunde}${o.eil?' · EIL':''}</span></div>
+      <div class="m">Start <b style="color:var(--sig-yellow)">${terminOf(o.startPlan)}</b> · WA-Termin ${terminOf(o.due)}
+        · Dauer ~${spanneOf(o.dauer||0)}</div>
+      <div class="m">fertig ca. ${terminOf(fertig)} · ${spät?`<span class="fehl">zu spät (${spanneOf(puffer)})</span>`:`Puffer ${spanneOf(puffer)}`}</div>
+      <div class="b">
+        <button data-earlier="${o.id}">− 1 h</button>
+        <button data-later="${o.id}">+ 1 h</button>
+        <button class="ja" data-start="${o.id}">Jetzt starten</button>
+      </div></div>`;
   }
   for(const o of laufend.filter(x=>x.status!=='lieferung').slice(0,5)){
     const la=S.lageraufteaege.find(x=>x.id===o.la);
@@ -2907,6 +2963,15 @@ $('auftraege').addEventListener('click',e=>{
     const o=S.orders.find(x=>x.id===b.dataset.lf); if(o) lieferungAnlegen(o);
   } else if(b.dataset.la){
     const lf=S.lieferungen.find(x=>x.id===b.dataset.la); if(lf) anLagerUebergeben(lf);
+  } else if(b.dataset.earlier){
+    const o=S.orders.find(x=>x.id===b.dataset.earlier);
+    if(o&&o.status==='geplant') o.startPlan=Math.max(tick, o.startPlan-120);   // 1 h früher
+  } else if(b.dataset.later){
+    const o=S.orders.find(x=>x.id===b.dataset.later);
+    if(o&&o.status==='geplant') o.startPlan=o.startPlan+120;                    // 1 h später
+  } else if(b.dataset.start){
+    const o=S.orders.find(x=>x.id===b.dataset.start);
+    if(o&&o.status==='geplant'){ o.startPlan=tick; freigeben(o); }              // sofort starten
   }
   updateHUD();
 });
