@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Rennbahn 🏁</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2e7d32; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(0,0,0,.55); color: #fff; text-align: center; padding: 16px; z-index: 10; }
+  .hidden { display: none !important; }
+  h1 { margin: 0; font-size: 42px; text-shadow: 0 3px 0 #000; }
+  .players { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .player { background: rgba(255,255,255,.12); border-radius: 18px; padding: 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .player label { font-weight: 700; font-size: 18px; }
+  .player input { width: 110px; font-size: 26px; text-align: center; border-radius: 10px; border: none; padding: 4px; font-weight: 800; }
+  .swatch { width: 70px; height: 34px; border-radius: 8px; border: 3px solid #fff; }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  button.big { font-size: 22px; font-weight: 800; padding: 14px 22px; border-radius: 16px; border: none; background: #ffca28; color: #222; box-shadow: 0 5px 0 #b28704; }
+  button.big:active { transform: translateY(4px); box-shadow: 0 1px 0 #b28704; }
+  .ctrl { position: fixed; bottom: 14px; display: flex; gap: 12px; z-index: 5; }
+  .ctrl.left { left: 14px; } .ctrl.right { right: 14px; }
+  .ctrl div { width: 78px; height: 78px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; border: 4px solid rgba(255,255,255,.8); opacity: .85; }
+  .ctrl div.on { opacity: 1; transform: scale(.92); }
+  #hud { position: fixed; top: 8px; left: 0; right: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; z-index: 5; pointer-events: none; }
+  #hud span { background: rgba(0,0,0,.6); color: #fff; padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 14px; white-space: nowrap; }
+  #count { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; font-weight: 900; color: #fff; text-shadow: 0 6px 0 #000; pointer-events: none; z-index: 6; }
+  .hint { font-size: 14px; opacity: .85; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud"></div>
+<div id="count"></div>
+
+<div class="ctrl left hidden" id="ctrlL"><div data-k="L1">◀</div><div data-k="R1">▶</div></div>
+<div class="ctrl right hidden" id="ctrlR"><div data-k="L0">◀</div><div data-k="R0">▶</div></div>
+
+<div class="screen" id="menu">
+  <h1>🏁 Rennbahn 🏎️</h1>
+  <div class="players">
+    <div class="player">
+      <label>Ich</label>
+      <div class="swatch" style="background:#0d2b8c"></div>
+      <input id="num0" type="number" inputmode="numeric" value="190">
+    </div>
+    <div class="player">
+      <label>Papa</label>
+      <div class="swatch" style="background:linear-gradient(90deg,#d6a8ff,#5a1a8c)"></div>
+      <input id="num1" type="number" inputmode="numeric" value="190">
+    </div>
+  </div>
+  <div class="btns">
+    <button class="big" data-mode="0">🚗 Ich allein</button>
+    <button class="big" data-mode="1">🚗 Papa allein</button>
+    <button class="big" data-mode="2">🚗🚗 Zu zweit</button>
+  </div>
+  <div class="hint">3 Runden · Das Auto fährt von selbst – du lenkst mit ◀ ▶<br>Tastatur: Ich = Pfeiltasten · Papa = A / D</div>
+</div>
+
+<div class="screen hidden" id="end">
+  <h1 id="endText"></h1>
+  <div id="endInfo" style="font-size:20px"></div>
+  <div class="btns">
+    <button class="big" id="again">🔁 Nochmal</button>
+    <button class="big" id="toMenu">🏠 Menü</button>
+  </div>
+</div>
+
+<script>
+// ---------- Strecke ----------
+// Welt ist 1000 x 620. Punkte werden zu einer runden Kurve verbunden.
+const W = 1000, H = 620, TRACK_W = 58, LAPS = 3;
+const CTRL = [
+  [200,550],[450,556],[700,550],          // lange Gerade unten (Start)
+  [870,548],[915,532],[925,495],          // SCHARFE Ecke unten rechts
+  [925,410],[912,350],[860,325],          // normale Kurve
+  [700,330],[575,336],                    // nach links
+  [528,318],[518,280],[548,258],          // SCHARFE Haarnadel
+  [620,250],[800,245],[880,238],          // nach rechts
+  [915,210],[915,165],[905,100],          // SCHARFE Ecke
+  [890,68],[850,60],                      // Haarnadel oben rechts
+  [620,64],[440,70],                      // Gerade oben
+  [345,95],[300,165],[230,198],[165,175], // S-Kurve (normal)
+  [110,148],[78,170],[75,215],            // SCHARFE Ecke links
+  [130,280],[230,345],[220,395],          // normale Kurve + Schikane
+  [140,430],[90,470],[95,525],[140,548]   // zurück zum Start
+];
+
+function catmull(p0,p1,p2,p3,t){
+  const t2=t*t,t3=t2*t;
+  return [
+    0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+    0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+  ];
+}
+const PTS = [];
+for (let i=0;i<CTRL.length;i++){
+  const n=CTRL.length, p0=CTRL[(i-1+n)%n], p1=CTRL[i], p2=CTRL[(i+1)%n], p3=CTRL[(i+2)%n];
+  const steps = Math.max(6, Math.round(Math.hypot(p2[0]-p1[0],p2[1]-p1[1])/6));
+  for (let s=0;s<steps;s++) PTS.push(catmull(p0,p1,p2,p3,s/steps));
+}
+const N = PTS.length;
+
+// ---------- Bildschirm ----------
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let view = {s:1, ox:0, oy:0, rot:false};
+function resize(){
+  const dpr = window.devicePixelRatio||1;
+  cv.width = innerWidth*dpr; cv.height = innerHeight*dpr;
+  const rot = innerHeight > innerWidth*1.1;          // Hochformat: Strecke drehen
+  const ww = rot?H:W, wh = rot?W:H;
+  const s = Math.min(innerWidth/(ww+30), innerHeight/(wh+30))*dpr;
+  view = {s, rot, ox:(cv.width-ww*s)/2, oy:(cv.height-wh*s)/2};
+}
+addEventListener('resize', resize); resize();
+function applyView(){
+  ctx.setTransform(view.s,0,0,view.s,view.ox,view.oy);
+  if (view.rot){ ctx.translate(H,0); ctx.rotate(Math.PI/2); }
+}
+
+// ---------- Hintergrund einmal vorzeichnen ----------
+let bg = null;
+function drawTrackPath(c){
+  c.beginPath(); c.moveTo(PTS[0][0],PTS[0][1]);
+  for (const p of PTS) c.lineTo(p[0],p[1]);
+  c.closePath();
+}
+function buildBg(){
+  bg = document.createElement('canvas'); bg.width = W*2; bg.height = H*2;
+  const b = bg.getContext('2d'); b.scale(2,2);
+  b.fillStyle='#3b9b3f'; b.fillRect(0,0,W,H);
+  // Grasstreifen
+  b.fillStyle='#43a547'; for(let x=0;x<W;x+=60) b.fillRect(x,0,30,H);
+  b.lineJoin='round'; b.lineCap='round';
+  // Randsteine rot/weiß
+  drawTrackPath(b); b.strokeStyle='#fff'; b.lineWidth=TRACK_W+14; b.stroke();
+  b.lineCap='butt'; b.setLineDash([12,12]); drawTrackPath(b); b.strokeStyle='#e53935'; b.stroke(); b.setLineDash([]); b.lineCap='round';
+  // Asphalt
+  drawTrackPath(b); b.strokeStyle='#555'; b.lineWidth=TRACK_W; b.stroke();
+  // Mittellinie
+  b.setLineDash([12,16]); drawTrackPath(b); b.strokeStyle='rgba(255,255,255,.55)'; b.lineWidth=2; b.stroke(); b.setLineDash([]);
+  // Start/Ziel kariert
+  const a=PTS[0], c=PTS[3], ang=Math.atan2(c[1]-a[1],c[0]-a[0]);
+  b.save(); b.translate(a[0],a[1]); b.rotate(ang);
+  const sq=TRACK_W/6;
+  for(let i=0;i<6;i++) for(let j=0;j<2;j++){ b.fillStyle=(i+j)%2?'#000':'#fff'; b.fillRect(j*sq-sq, -TRACK_W/2+i*sq, sq, sq); }
+  b.restore();
+  // Bäume
+  const trees=[[40,40],[300,300],[400,250],[620,450],[720,430],[960,600],[960,250],[30,600],[560,160],[250,40],[980,30],[450,420]];
+  for(const [x,y] of trees){ b.fillStyle='#1b5e20'; b.beginPath(); b.arc(x,y,16,0,7); b.fill(); b.fillStyle='#2e7d32'; b.beginPath(); b.arc(x-4,y-4,10,0,7); b.fill(); }
+}
+buildBg();
+
+// ---------- Autos ----------
+const CARS_DEF = [
+  {name:'Ich',  body:'#0d2b8c', body2:'#0d2b8c', keys:{L:['ArrowLeft'],R:['ArrowRight']}},
+  {name:'Papa', body:'#d6a8ff', body2:'#5a1a8c', keys:{L:['a','A'],R:['d','D']}}
+];
+let cars=[], mode=0, state='menu', countT=0, raceT=0, finishOrder=[];
+const input = {L0:false,R0:false,L1:false,R1:false};
+
+function startRace(m){
+  mode=m;
+  const a=PTS[0], c=PTS[3], ang=Math.atan2(c[1]-a[1],c[0]-a[0]);
+  const ids = m===2?[0,1]:[m];
+  cars = ids.map((id,k)=>{
+    const off = ids.length===2 ? (k===0?-14:14) : 0;
+    const back = 40;
+    return {
+      id, def:CARS_DEF[id], num: String(document.getElementById('num'+id).value||'0').slice(0,4),
+      x:a[0]-Math.cos(ang)*back - Math.sin(ang)*off,
+      y:a[1]-Math.sin(ang)*back + Math.cos(ang)*off,
+      a:ang, v:0, idx:N-6, lap:0, cp:0, done:false, time:0, lapStart:0, best:null
+    };
+  });
+  finishOrder=[]; raceT=0; countT=3.999; state='count';
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('end').classList.add('hidden');
+  // Lenk-Knöpfe
+  const L=document.getElementById('ctrlL'), R=document.getElementById('ctrlR');
+  L.classList.remove('hidden'); R.classList.remove('hidden');
+  if (m===2){
+    setCtrl(L,1,'L1','R1'); setCtrl(R,0,'L0','R0');
+  } else {
+    // allein: links = nach links, rechts = nach rechts
+    L.children[0].dataset.k='L'+m; L.children[1].style.display='none';
+    R.children[1].dataset.k='R'+m; R.children[0].style.display='none';
+    L.children[0].style.background = R.children[1].style.background = colorOf(m);
+  }
+}
+function colorOf(id){ return id===0?'#0d2b8c':'linear-gradient(135deg,#d6a8ff,#5a1a8c)'; }
+function setCtrl(el,id,l,r){
+  el.children[0].dataset.k=l; el.children[1].dataset.k=r;
+  for (const d of el.children){ d.style.display=''; d.style.background=colorOf(id); }
+}
+
+function nearestIdx(car){
+  let best=car.idx, bd=1e9;
+  for(let o=-25;o<=40;o++){
+    const i=(car.idx+o+N)%N, p=PTS[i], d=(p[0]-car.x)**2+(p[1]-car.y)**2;
+    if(d<bd){bd=d;best=i;}
+  }
+  return {i:best, d:Math.sqrt(bd)};
+}
+
+function update(dt){
+  if (state==='count'){ countT-=dt; if(countT<=0){ state='race'; } }
+  if (state!=='race' && state!=='finish') return;
+  raceT+=dt;
+  for (const car of cars){
+    if (car.done){ car.v*=0.97; }
+    const steer = car.done?0:((input['R'+car.id]?1:0)-(input['L'+car.id]?1:0));
+    const near = nearestIdx(car);
+    const onTrack = near.d < TRACK_W/2+4;
+    let target = onTrack ? 230 : 85;
+    if (steer!==0) target *= 0.66;          // beim Lenken langsamer -> scharfe Kurven gehen
+    if (!car.done){ car.v += (target-car.v)*Math.min(1,dt*(car.v<target?1.4:3)); }
+    car.a += steer * 3.4 * dt * Math.min(1, car.v/70);
+    car.x += Math.cos(car.a)*car.v*dt; car.y += Math.sin(car.a)*car.v*dt;
+    car.x=Math.max(10,Math.min(W-10,car.x)); car.y=Math.max(10,Math.min(H-10,car.y));
+    // Runden zählen über Kontrollpunkte
+    const prev=car.idx; car.idx=near.i;
+    const q = Math.floor(car.idx/(N/4));
+    if (q===car.cp+1 && q<=3) car.cp=q;
+    if (prev>N*0.8 && car.idx<N*0.2 && car.cp===3){
+      car.cp=0; car.lap++;
+      const lt=raceT-car.lapStart; car.lapStart=raceT;
+      if(car.best===null||lt<car.best) car.best=lt;
+      if (car.lap>=LAPS && !car.done){ car.done=true; car.time=raceT; finishOrder.push(car); }
+    }
+  }
+  // Autos schubsen sich weg
+  if (cars.length===2){
+    const [a,b]=cars, dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy);
+    if (d<26 && d>0.01){ const p=(26-d)/2, nx=dx/d, ny=dy/d; a.x-=nx*p; a.y-=ny*p; b.x+=nx*p; b.y+=ny*p; a.v*=.97; b.v*=.97; }
+  }
+  if (state==='race' && finishOrder.length===1 && cars.length===2) state='finish';
+  if (finishOrder.length===cars.length && state!=='over'){ state='over'; setTimeout(showEnd,900); }
+}
+
+function fmt(t){ return t.toFixed(1).replace('.',',')+' s'; }
+function showEnd(){
+  const w=finishOrder[0];
+  document.getElementById('endText').textContent = cars.length===2 ? `🏆 ${w.def.name} (${w.num}) gewinnt!` : `🏁 Geschafft, ${w.num}!`;
+  document.getElementById('endInfo').innerHTML = finishOrder.map((c,i)=>`${i+1}. ${c.def.name} #${c.num} – ${fmt(c.time)} (beste Runde ${fmt(c.best)})`).join('<br>');
+  document.getElementById('end').classList.remove('hidden');
+  document.getElementById('ctrlL').classList.add('hidden'); document.getElementById('ctrlR').classList.add('hidden');
+}
+
+// ---------- Zeichnen ----------
+function drawCar(c){
+  ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.a);
+  const L=42, Wd=23;
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(-L/2+2,-Wd/2+3,L,Wd);
+  // Reifen
+  ctx.fillStyle='#111';
+  for (const [x,y] of [[-15,-14],[8,-14],[-15,9],[8,9]]) ctx.fillRect(x,y,10,5);
+  // Karosserie
+  const g=ctx.createLinearGradient(L/2,0,-L/2,0); g.addColorStop(0,c.def.body); g.addColorStop(1,c.def.body2);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.roundRect(-L/2,-Wd/2,L,Wd,6); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=1; ctx.stroke();
+  // Spoiler + Scheibe
+  ctx.fillStyle='#222'; ctx.fillRect(-L/2-2,-Wd/2,3,Wd);
+  ctx.fillStyle='rgba(180,220,255,.9)'; ctx.fillRect(8,-7,6,14);
+  // Startnummer
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(-6,0,11,9,0,0,7); ctx.fill();
+  ctx.restore();
+  // Zahl immer aufrecht lesbar
+  ctx.save();
+  ctx.translate(c.x-6*Math.cos(c.a), c.y-6*Math.sin(c.a));
+  if (view.rot) ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='#000'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=`900 ${c.num.length>3?7:9}px system-ui`;
+  ctx.fillText(c.num, 0, 0.5);
+  ctx.restore();
+}
+
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#2e7d32'; ctx.fillRect(0,0,cv.width,cv.height);
+  applyView();
+  ctx.drawImage(bg,0,0,W,H);
+  for (const c of cars) drawCar(c);
+  // HUD
+  document.getElementById('hud').innerHTML = cars.map(c=>
+    `<span style="border:3px solid ${c.def.body2}">${c.def.name} #${c.num} · Runde ${Math.min(c.lap+1,LAPS)}/${LAPS}${c.done?' 🏁':''}</span>`
+  ).join('') + (state==='race'||state==='finish'?`<span>⏱ ${fmt(raceT)}</span>`:'');
+  const ce=document.getElementById('count');
+  if (state==='count'){ const n=Math.ceil(countT)-1; ce.textContent = n>0?n:'LOS!'; }
+  else if (state==='race' && raceT<0.8) ce.textContent='LOS!';
+  else ce.textContent='';
+}
+
+let last=performance.now();
+function loop(t){
+  const dt=Math.min(0.05,(t-last)/1000); last=t;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- Eingabe ----------
+addEventListener('keydown',e=>{
+  for (const id of [0,1]) for (const s of ['L','R']) if (CARS_DEF[id].keys[s].includes(e.key)){ input[s+id]=true; e.preventDefault(); }
+});
+addEventListener('keyup',e=>{
+  for (const id of [0,1]) for (const s of ['L','R']) if (CARS_DEF[id].keys[s].includes(e.key)) input[s+id]=false;
+});
+document.querySelectorAll('.ctrl div').forEach(d=>{
+  const set=v=>{ input[d.dataset.k]=v; d.classList.toggle('on',v); };
+  d.addEventListener('pointerdown',e=>{ e.preventDefault(); d.setPointerCapture(e.pointerId); set(true); });
+  d.addEventListener('pointerup',()=>set(false));
+  d.addEventListener('pointercancel',()=>set(false));
+  d.addEventListener('lostpointercapture',()=>set(false));
+});
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>startRace(+b.dataset.mode));
+document.getElementById('again').onclick=()=>startRace(mode);
+document.getElementById('toMenu').onclick=()=>{
+  state='menu'; cars=[];
+  document.getElementById('end').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+};
+</script>
+</body>
+</html>
